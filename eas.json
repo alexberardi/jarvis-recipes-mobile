@@ -18,15 +18,15 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth-staging.jarvisrecipes.com",
-        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes-staging.jarvisrecipes.com"
+        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth-staging.jarvisautomation.io",
+        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes-staging.jarvisautomation.io"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth.jarvisrecipes.com",
-        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes.jarvisrecipes.com"
+        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth.jarvisautomation.io",
+        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes.jarvisautomation.io"
       }
     }
   },

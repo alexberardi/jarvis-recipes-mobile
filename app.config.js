@@ -16,7 +16,7 @@ export default {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.anonymous.jarvisrecipesmobile',
+      bundleIdentifier: 'com.jarvisautomation.jarvisrecipesmobile',
     },
     android: {
       adaptiveIcon: {
@@ -31,6 +31,9 @@ export default {
       favicon: './assets/favicon.png',
     },
     extra: {
+      eas: {
+        projectId: 'bdbd0be7-f229-46ba-93b0-7205af508053',
+      },
       EXPO_PUBLIC_AUTH_API_BASE_URL: process.env.EXPO_PUBLIC_AUTH_API_BASE_URL,
       EXPO_PUBLIC_RECIPES_API_BASE_URL: process.env.EXPO_PUBLIC_RECIPES_API_BASE_URL,
     },

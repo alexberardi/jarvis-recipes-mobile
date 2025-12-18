@@ -8,18 +8,27 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: 'Build profile (preview or production)'
+        description: 'Build profile'
         required: true
         default: 'preview'
         type: choice
         options:
           - preview
           - production
+      environment:
+        description: 'GitHub Environment'
+        required: true
+        default: 'jarvis-mobile-staging'
+        type: choice
+        options:
+          - jarvis-mobile-staging
+          - jarvis-mobile-prod
 
 jobs:
   build-and-deploy:
     name: Build and Deploy iOS App
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'jarvis-mobile-prod' || 'jarvis-mobile-staging') }}
     steps:
       - name: Check for EXPO_TOKEN
         run: |
@@ -61,7 +70,7 @@ jobs:
         run: |
           eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --non-interactive --no-wait
         env:
-          # Override environment variables if needed
+          # Override eas.json values with secrets from GitHub Environment
           EXPO_PUBLIC_AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
           EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
 
