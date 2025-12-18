@@ -79,9 +79,10 @@ jobs:
         id: submit
         run: |
           # Trim whitespace just in case secrets have trailing spaces/newlines
-          APPLE_ID_TRIMMED="$(echo -n "${APPLE_ID}" | tr -d '[:space:]')"
-          ASC_APP_ID_TRIMMED="$(echo -n "${ASC_APP_ID}" | tr -d '[:space:]')"
-          APPLE_TEAM_ID_TRIMMED="$(echo -n "${APPLE_TEAM_ID}" | tr -d '[:space:]')"
+
+          APPLE_ID_TRIMMED="$(printf '%s' "$APPLE_ID" | tr -d '\r' | xargs)"
+          ASC_APP_ID_TRIMMED="$(printf '%s' "$ASC_APP_ID" | tr -d '\r' | xargs)"
+          APPLE_TEAM_ID_TRIMMED="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '\r' | xargs | tr '[:lower:]' '[:upper:]')"
 
           # Fail fast if any Apple credentials are missing
           if [ -z "${APPLE_ID_TRIMMED}" ] || [ -z "${ASC_APP_ID_TRIMMED}" ] || [ -z "${APPLE_TEAM_ID_TRIMMED}" ]; then
@@ -111,11 +112,11 @@ jobs:
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
           # Expo/EAS expects EXPO_* names; set both just in case
-          APPLE_ID: ${{ secrets.APPLE_ID || vars.APPLE_ID }}
-          ASC_APP_ID: ${{ secrets.ASC_APP_ID || vars.ASC_APP_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || vars.APPLE_TEAM_ID }}
-          EXPO_APPLE_ID: ${{ secrets.APPLE_ID || vars.APPLE_ID }}
-          EXPO_ASC_APP_ID: ${{ secrets.ASC_APP_ID || vars.ASC_APP_ID }}
-          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || vars.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPO_APPLE_ID: ${{ secrets.APPLE_ID  }}
+          EXPO_ASC_APP_ID: ${{ secrets.ASC_APP_ID  }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Optional: set EXPO_APPLE_APP_SPECIFIC_PASSWORD if using Apple ID auth instead of API key
 
