@@ -95,14 +95,35 @@ jobs:
             exit 1
           fi
 
-          # Validate and trim ASC App ID
-          # Note: eas submit runs locally in GitHub Actions, so EAS Secrets aren't automatically available
-          # We use GitHub secrets for submit, while EAS Secrets are used for cloud builds
-          ASC_APP_ID=$(echo "${EXPO_PUBLIC_ASC_APP_ID}" | tr -d '[:space:]')
+          # Fetch ASC App ID from EAS Secrets
+          # Try ASC_APP_ID first (secret), then fallback to EXPO_PUBLIC_ASC_APP_ID (plain text)
+          ASC_APP_ID=""
+          PROFILE="${{ steps.profile.outputs.profile }}"
+          
+          # Try to fetch from EAS Secrets using the EAS CLI
+          echo "Fetching ASC App ID from EAS Secrets..."
+          if EAS_SECRET=$(eas secret:list --json 2>/dev/null | jq -r ".[] | select(.name == \"ASC_APP_ID\") | .value" 2>/dev/null); then
+            if [ -n "${EAS_SECRET}" ] && [ "${EAS_SECRET}" != "null" ]; then
+              ASC_APP_ID="${EAS_SECRET}"
+              echo "Found ASC_APP_ID in EAS Secrets"
+            fi
+          fi
+          
+          # Fallback to EXPO_PUBLIC_ASC_APP_ID if ASC_APP_ID not found
           if [ -z "${ASC_APP_ID}" ]; then
-            echo "Missing EXPO_PUBLIC_ASC_APP_ID secret."
-            echo "Ensure EXPO_PUBLIC_ASC_APP_ID is set in GitHub Environment secrets."
-            echo "Note: EAS Secrets are used for builds, but GitHub secrets are needed for local submit execution."
+            if EAS_PUBLIC_SECRET=$(eas secret:list --json 2>/dev/null | jq -r ".[] | select(.name == \"EXPO_PUBLIC_ASC_APP_ID\") | .value" 2>/dev/null); then
+              if [ -n "${EAS_PUBLIC_SECRET}" ] && [ "${EAS_PUBLIC_SECRET}" != "null" ]; then
+                ASC_APP_ID="${EAS_PUBLIC_SECRET}"
+                echo "Found EXPO_PUBLIC_ASC_APP_ID in EAS Secrets"
+              fi
+            fi
+          fi
+          
+          # Validate and trim ASC App ID
+          ASC_APP_ID=$(echo "${ASC_APP_ID}" | tr -d '[:space:]')
+          if [ -z "${ASC_APP_ID}" ]; then
+            echo "Missing ASC App ID from EAS Secrets."
+            echo "Ensure either ASC_APP_ID or EXPO_PUBLIC_ASC_APP_ID is set in Expo EAS Secrets."
             exit 1
           fi
 
@@ -119,7 +140,6 @@ jobs:
 
           # Update eas.json with the ASC App ID for the current profile
           # EAS doesn't support environment variable substitution in submit section
-          PROFILE="${{ steps.profile.outputs.profile }}"
           # Install jq for reliable JSON manipulation
           sudo apt-get update && sudo apt-get install -y jq || true
           if command -v jq &> /dev/null; then
@@ -141,7 +161,4 @@ jobs:
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
           EXPO_APPLE_ISSUER_ID: ${{ secrets.EXPO_APPLE_ISSUER_ID }}
           EXPO_APPLE_KEY_CONTENT: ${{ secrets.EXPO_APPLE_KEY_CONTENT }}
-          # ASC App ID - prefer GitHub secret for local submit execution
-          # EAS Secrets are available during cloud builds but not for local submit
-          EXPO_PUBLIC_ASC_APP_ID: ${{ secrets.EXPO_PUBLIC_ASC_APP_ID }}
 
