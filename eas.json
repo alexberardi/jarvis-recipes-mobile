@@ -13,9 +13,10 @@
       }
     },
     "preview": {
-      "distribution": "internal",
+      "autoIncrement": true,
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "buildConfiguration": "Release"
       },
       "env": {
         "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth-staging.jarvisautomation.io",
@@ -31,6 +32,13 @@
     }
   },
   "submit": {
+    "preview": {
+      "ios": {
+        "appleId": "${APPLE_ID}",
+        "ascAppId": "${ASC_APP_ID}",
+        "appleTeamId": "${APPLE_TEAM_ID}"
+      }
+    },
     "production": {
       "ios": {
         "appleId": "${APPLE_ID}",

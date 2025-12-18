@@ -75,10 +75,9 @@ jobs:
           EXPO_PUBLIC_AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
           EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
 
-      - name: Submit to TestFlight (Tagged releases only)
-        if: steps.profile.outputs.profile == 'production'
+      - name: Submit to TestFlight
         run: |
-          eas submit --platform ios --profile production --latest --non-interactive
+          eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
