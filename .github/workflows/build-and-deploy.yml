@@ -76,10 +76,22 @@ jobs:
           EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
 
       - name: Submit to TestFlight
+        id: submit
         run: |
           # Fail fast if any Apple credentials are missing
           if [ -z "${APPLE_ID}" ] || [ -z "${ASC_APP_ID}" ] || [ -z "${APPLE_TEAM_ID}" ]; then
             echo "Missing Apple credentials. Ensure APPLE_ID, ASC_APP_ID, and APPLE_TEAM_ID secrets/vars are set."
+            exit 1
+          fi
+          echo "APPLE_ID length: ${#APPLE_ID}"
+          echo "ASC_APP_ID length: ${#ASC_APP_ID}"
+          echo "APPLE_TEAM_ID length: ${#APPLE_TEAM_ID}"
+          if ! [[ "${ASC_APP_ID}" =~ ^[0-9]+$ ]]; then
+            echo "ASC_APP_ID is not numeric. Current value (masked): '${ASC_APP_ID}'"
+            exit 1
+          fi
+          if ! [[ "${APPLE_TEAM_ID}" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "APPLE_TEAM_ID is not 10 uppercase letters/digits. Current value (masked): '${APPLE_TEAM_ID}'"
             exit 1
           fi
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
