@@ -78,22 +78,36 @@ jobs:
       - name: Submit to TestFlight
         id: submit
         run: |
+          # Trim whitespace just in case secrets have trailing spaces/newlines
+          APPLE_ID_TRIMMED="$(echo -n "${APPLE_ID}" | tr -d '[:space:]')"
+          ASC_APP_ID_TRIMMED="$(echo -n "${ASC_APP_ID}" | tr -d '[:space:]')"
+          APPLE_TEAM_ID_TRIMMED="$(echo -n "${APPLE_TEAM_ID}" | tr -d '[:space:]')"
+
           # Fail fast if any Apple credentials are missing
-          if [ -z "${APPLE_ID}" ] || [ -z "${ASC_APP_ID}" ] || [ -z "${APPLE_TEAM_ID}" ]; then
+          if [ -z "${APPLE_ID_TRIMMED}" ] || [ -z "${ASC_APP_ID_TRIMMED}" ] || [ -z "${APPLE_TEAM_ID_TRIMMED}" ]; then
             echo "Missing Apple credentials. Ensure APPLE_ID, ASC_APP_ID, and APPLE_TEAM_ID secrets/vars are set."
             exit 1
           fi
-          echo "APPLE_ID length: ${#APPLE_ID}"
-          echo "ASC_APP_ID length: ${#ASC_APP_ID}"
-          echo "APPLE_TEAM_ID length: ${#APPLE_TEAM_ID}"
-          if ! [[ "${ASC_APP_ID}" =~ ^[0-9]+$ ]]; then
-            echo "ASC_APP_ID is not numeric. Current value (masked): '${ASC_APP_ID}'"
+          echo "APPLE_ID length (trimmed): ${#APPLE_ID_TRIMMED}"
+          echo "ASC_APP_ID length (trimmed): ${#ASC_APP_ID_TRIMMED}"
+          echo "APPLE_TEAM_ID length (trimmed): ${#APPLE_TEAM_ID_TRIMMED}"
+          if ! [[ "${ASC_APP_ID_TRIMMED}" =~ ^[0-9]+$ ]]; then
+            echo "ASC_APP_ID is not numeric. Current value (masked): '${ASC_APP_ID_TRIMMED}'"
             exit 1
           fi
-          if ! [[ "${APPLE_TEAM_ID}" =~ ^[A-Z0-9]{10}$ ]]; then
-            echo "APPLE_TEAM_ID is not 10 uppercase letters/digits. Current value (masked): '${APPLE_TEAM_ID}'"
+          if ! [[ "${APPLE_TEAM_ID_TRIMMED}" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "APPLE_TEAM_ID is not 10 uppercase letters/digits. Current value (masked): '${APPLE_TEAM_ID_TRIMMED}'"
             exit 1
           fi
+
+          # Export trimmed values for EAS submit
+          export APPLE_ID="${APPLE_ID_TRIMMED}"
+          export ASC_APP_ID="${ASC_APP_ID_TRIMMED}"
+          export APPLE_TEAM_ID="${APPLE_TEAM_ID_TRIMMED}"
+          export EXPO_APPLE_ID="${APPLE_ID_TRIMMED}"
+          export EXPO_ASC_APP_ID="${ASC_APP_ID_TRIMMED}"
+          export EXPO_APPLE_TEAM_ID="${APPLE_TEAM_ID_TRIMMED}"
+
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
           # Expo/EAS expects EXPO_* names; set both just in case
