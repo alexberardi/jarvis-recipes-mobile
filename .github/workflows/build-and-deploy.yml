@@ -77,9 +77,14 @@ jobs:
 
       - name: Submit to TestFlight
         run: |
+          # Fail fast if any Apple credentials are missing
+          if [ -z "${APPLE_ID}" ] || [ -z "${ASC_APP_ID}" ] || [ -z "${APPLE_TEAM_ID}" ]; then
+            echo "Missing Apple credentials. Ensure APPLE_ID, ASC_APP_ID, and APPLE_TEAM_ID secrets/vars are set."
+            exit 1
+          fi
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID || vars.APPLE_ID }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID || vars.ASC_APP_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || vars.APPLE_TEAM_ID }}
 

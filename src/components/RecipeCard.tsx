@@ -16,25 +16,25 @@ const RecipeCard = ({ recipe, onPress }: Props) => {
 
   return (
     <Card style={styles.card} onPress={onPress} mode="elevated">
-      <Card.Cover
-        source={
-          recipe.image_url
-            ? { uri: recipe.image_url }
-            : require('../../assets/recipes/placeholder.png')
-        }
-        style={styles.cover}
-      />
-      <Card.Content>
-        <Text variant="titleMedium" style={styles.title}>
-          {recipe.title}
-        </Text>
-        {recipe.description ? (
+    <Card.Cover
+      source={
+        recipe.image_url
+          ? { uri: recipe.image_url }
+          : require('../../assets/recipes/placeholder.png')
+      }
+      style={styles.cover}
+    />
+    <Card.Content>
+      <Text variant="titleMedium" style={styles.title}>
+        {recipe.title}
+      </Text>
+      {recipe.description ? (
           <Text variant="bodyMedium" style={[styles.description, { color: descriptionColor }]} numberOfLines={2}>
-            {recipe.description}
-          </Text>
-        ) : null}
-        <View style={styles.tags}>
-          {recipe.tags.slice(0, 3).map((tag) => (
+          {recipe.description}
+        </Text>
+      ) : null}
+      <View style={styles.tags}>
+        {recipe.tags.slice(0, 3).map((tag) => (
             <Chip
               key={tag.id}
               compact
@@ -47,13 +47,13 @@ const RecipeCard = ({ recipe, onPress }: Props) => {
               ]}
               textStyle={{ color: theme.colors.onSurface }}
             >
-              {tag.name}
-            </Chip>
-          ))}
-        </View>
-      </Card.Content>
-    </Card>
-  );
+            {tag.name}
+          </Chip>
+        ))}
+      </View>
+    </Card.Content>
+  </Card>
+);
 };
 
 const styles = StyleSheet.create({

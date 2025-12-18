@@ -7,7 +7,7 @@ export const enqueueParseUrl = async (url: string) => {
       url: '/recipes/parse-url/async',
       method: 'POST',
       data: { url, use_llm_fallback: true },
-    });
+  });
   } catch (err: any) {
     // Bubble structured server errors to the caller for WebView fallback decisions.
     throw err;

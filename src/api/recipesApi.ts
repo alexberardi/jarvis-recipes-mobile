@@ -41,7 +41,7 @@ recipesApi.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 const isInvalidTokenError = (error: AxiosError) => {
-  const status = error.response?.status;
+    const status = error.response?.status;
   const detail = (error.response?.data as any)?.detail;
   const message = (detail || error.message || '').toString().toLowerCase();
   return (
@@ -66,14 +66,14 @@ export const recipesRequest = async <T = any>(
     const error = err as AxiosError;
     if (isInvalidTokenError(error)) {
       if (retryCount === 0) {
-        const newAccessToken = await refreshAccessToken();
-        if (newAccessToken) {
+      const newAccessToken = await refreshAccessToken();
+      if (newAccessToken) {
           return recipesRequest(
             {
               ...config,
               headers: {
                 ...(config.headers || {}),
-                Authorization: `Bearer ${newAccessToken}`,
+          Authorization: `Bearer ${newAccessToken}`,
               },
             },
             retryCount + 1,
