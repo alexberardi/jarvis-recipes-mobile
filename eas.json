@@ -28,19 +28,19 @@
       "env": {
         "EXPO_PUBLIC_AUTH_API_BASE_URL": "${EXPO_PUBLIC_AUTH_API_BASE_URL}",
         "EXPO_PUBLIC_RECIPES_API_BASE_URL": "${EXPO_PUBLIC_RECIPES_API_BASE_URL}",
-        "ASC_APP_ID": "${ASC_APP_ID}"
+        "EXPO_PUBLIC_ASC_APP_ID": "${EXPO_PUBLIC_ASC_APP_ID}"
       }
     }
   },
   "submit": {
     "preview": {
       "ios": {
-        "ascAppId": "${ASC_APP_ID}"
+        "ascAppId": "${EXPO_PUBLIC_ASC_APP_ID}"
       }
     },
     "production": {
       "ios": {
-        "ascAppId": "${ASC_APP_ID}"
+        "ascAppId": "${EXPO_PUBLIC_ASC_APP_ID}"
       }
     }
   }
