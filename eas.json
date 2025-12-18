@@ -18,31 +18,27 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth-staging.jarvisautomation.io",
-        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes-staging.jarvisautomation.io"
+        "EXPO_PUBLIC_AUTH_API_BASE_URL": "${EXPO_PUBLIC_AUTH_API_BASE_URL}",
+        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "${EXPO_PUBLIC_RECIPES_API_BASE_URL}"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_AUTH_API_BASE_URL": "https://auth.jarvisautomation.io",
-        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "https://recipes.jarvisautomation.io"
+        "EXPO_PUBLIC_AUTH_API_BASE_URL": "${EXPO_PUBLIC_AUTH_API_BASE_URL}",
+        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "${EXPO_PUBLIC_RECIPES_API_BASE_URL}"
       }
     }
   },
   "submit": {
     "preview": {
       "ios": {
-        "appleId": "${APPLE_ID}",
-        "ascAppId": "${ASC_APP_ID}",
-        "appleTeamId": "${APPLE_TEAM_ID}"
+        "ascAppId": "${ASC_APP_ID}"
       }
     },
     "production": {
       "ios": {
-        "appleId": "${APPLE_ID}",
-        "ascAppId": "${ASC_APP_ID}",
-        "appleTeamId": "${APPLE_TEAM_ID}"
+        "ascAppId": "${ASC_APP_ID}"
       }
     }
   }

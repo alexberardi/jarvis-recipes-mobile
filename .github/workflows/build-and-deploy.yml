@@ -78,45 +78,35 @@ jobs:
       - name: Submit to TestFlight
         id: submit
         run: |
-          # Trim whitespace just in case secrets have trailing spaces/newlines
-
-          APPLE_ID_TRIMMED="$(printf '%s' "$APPLE_ID" | tr -d '\r' | xargs)"
-          ASC_APP_ID_TRIMMED="$(printf '%s' "$ASC_APP_ID" | tr -d '\r' | xargs)"
-          APPLE_TEAM_ID_TRIMMED="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '\r' | xargs | tr '[:lower:]' '[:upper:]')"
-
-          # Fail fast if any Apple credentials are missing
-          if [ -z "${APPLE_ID_TRIMMED}" ] || [ -z "${ASC_APP_ID_TRIMMED}" ] || [ -z "${APPLE_TEAM_ID_TRIMMED}" ]; then
-            echo "Missing Apple credentials. Ensure APPLE_ID, ASC_APP_ID, and APPLE_TEAM_ID secrets/vars are set."
-            exit 1
-          fi
-          echo "APPLE_ID length (trimmed): ${#APPLE_ID_TRIMMED}"
-          echo "ASC_APP_ID length (trimmed): ${#ASC_APP_ID_TRIMMED}"
-          echo "APPLE_TEAM_ID length (trimmed): ${#APPLE_TEAM_ID_TRIMMED}"
-          if ! [[ "${ASC_APP_ID_TRIMMED}" =~ ^[0-9]+$ ]]; then
-            echo "ASC_APP_ID is not numeric. Current value (masked): '${ASC_APP_ID_TRIMMED}'"
-            exit 1
-          fi
-          if ! [[ "${APPLE_TEAM_ID_TRIMMED}" =~ ^[A-Z0-9]{10}$ ]]; then
-            echo "APPLE_TEAM_ID is not 10 uppercase letters/digits. Current value (masked): '${APPLE_TEAM_ID_TRIMMED}'"
+          # Validate App Store Connect API key credentials
+          if [ -z "${EXPO_APPLE_KEY_ID}" ] || [ -z "${EXPO_APPLE_ISSUER_ID}" ] || [ -z "${EXPO_APPLE_KEY_CONTENT}" ]; then
+            echo "Missing App Store Connect API key credentials."
+            echo "Ensure EXPO_APPLE_KEY_ID, EXPO_APPLE_ISSUER_ID, and EXPO_APPLE_KEY_CONTENT secrets are set."
             exit 1
           fi
 
-          # Export trimmed values for EAS submit
-          export APPLE_ID="${APPLE_ID_TRIMMED}"
-          export ASC_APP_ID="${ASC_APP_ID_TRIMMED}"
-          export APPLE_TEAM_ID="${APPLE_TEAM_ID_TRIMMED}"
-          export EXPO_APPLE_ID="${APPLE_ID_TRIMMED}"
-          export EXPO_ASC_APP_ID="${ASC_APP_ID_TRIMMED}"
-          export EXPO_APPLE_TEAM_ID="${APPLE_TEAM_ID_TRIMMED}"
+          # Validate Key ID format (10 characters, alphanumeric)
+          if ! [[ "${EXPO_APPLE_KEY_ID}" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "EXPO_APPLE_KEY_ID must be 10 uppercase alphanumeric characters."
+            exit 1
+          fi
+
+          # Validate Issuer ID format (UUID)
+          if ! [[ "${EXPO_APPLE_ISSUER_ID}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "EXPO_APPLE_ISSUER_ID must be a valid UUID format."
+            exit 1
+          fi
+
+          echo "Using App Store Connect API key authentication"
+          echo "Key ID: ${EXPO_APPLE_KEY_ID}"
+          echo "Issuer ID: ${EXPO_APPLE_ISSUER_ID}"
 
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
-          # Expo/EAS expects EXPO_* names; set both just in case
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          EXPO_APPLE_ID: ${{ secrets.APPLE_ID  }}
-          EXPO_ASC_APP_ID: ${{ secrets.ASC_APP_ID  }}
-          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Optional: set EXPO_APPLE_APP_SPECIFIC_PASSWORD if using Apple ID auth instead of API key
+          # App Store Connect API key credentials
+          EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
+          EXPO_APPLE_ISSUER_ID: ${{ secrets.EXPO_APPLE_ISSUER_ID }}
+          EXPO_APPLE_KEY_CONTENT: ${{ secrets.EXPO_APPLE_KEY_CONTENT }}
+          # ASC App ID is still needed for submission
+          EXPO_ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
 
