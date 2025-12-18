@@ -17,6 +17,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.jarvisautomation.jarvisrecipesmobile',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       adaptiveIcon: {

@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - main
-      - staging
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       profile:
@@ -28,7 +29,7 @@ jobs:
   build-and-deploy:
     name: Build and Deploy iOS App
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'jarvis-mobile-prod' || 'jarvis-mobile-staging') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'jarvis-mobile-prod' || 'jarvis-mobile-staging') }}
     steps:
       - name: Check for EXPO_TOKEN
         run: |
@@ -60,7 +61,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "profile=production" >> $GITHUB_OUTPUT
           else
             echo "profile=preview" >> $GITHUB_OUTPUT
@@ -74,7 +75,7 @@ jobs:
           EXPO_PUBLIC_AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
           EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
 
-      - name: Submit to TestFlight (Production only)
+      - name: Submit to TestFlight (Tagged releases only)
         if: steps.profile.outputs.profile == 'production'
         run: |
           eas submit --platform ios --profile production --latest --non-interactive
