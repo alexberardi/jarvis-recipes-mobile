@@ -84,7 +84,12 @@ jobs:
           fi
           eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive
         env:
+          # Expo/EAS expects EXPO_* names; set both just in case
           APPLE_ID: ${{ secrets.APPLE_ID || vars.APPLE_ID }}
           ASC_APP_ID: ${{ secrets.ASC_APP_ID || vars.ASC_APP_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || vars.APPLE_TEAM_ID }}
+          EXPO_APPLE_ID: ${{ secrets.APPLE_ID || vars.APPLE_ID }}
+          EXPO_ASC_APP_ID: ${{ secrets.ASC_APP_ID || vars.ASC_APP_ID }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || vars.APPLE_TEAM_ID }}
+          # Optional: set EXPO_APPLE_APP_SPECIFIC_PASSWORD if using Apple ID auth instead of API key
 
