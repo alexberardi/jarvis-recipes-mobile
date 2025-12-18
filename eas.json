@@ -34,10 +34,14 @@
   },
   "submit": {
     "preview": {
-      "ios": {}
+      "ios": {
+        "ascAppId": ""
+      }
     },
     "production": {
-      "ios": {}
+      "ios": {
+        "ascAppId": ""
+      }
     }
   }
 }

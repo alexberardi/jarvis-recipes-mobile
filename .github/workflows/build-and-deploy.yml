@@ -69,12 +69,9 @@ jobs:
 
       - name: Build iOS app
         run: |
+          # EAS Secrets configured in Expo dashboard will be used automatically during cloud builds
+          # The eas.json file references these via ${EXPO_PUBLIC_*} variables
           eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --non-interactive --no-wait
-        env:
-          # Override eas.json values with secrets from GitHub Environment
-          EXPO_PUBLIC_AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
-          EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
-          EXPO_PUBLIC_ASC_APP_ID: ${{ secrets.EXPO_PUBLIC_ASC_APP_ID}}
 
       - name: Submit to TestFlight
         id: submit
@@ -99,10 +96,13 @@ jobs:
           fi
 
           # Validate and trim ASC App ID
-          ASC_APP_ID=$(echo "${ASC_APP_ID}" | tr -d '[:space:]')
+          # Note: eas submit runs locally in GitHub Actions, so EAS Secrets aren't automatically available
+          # We use GitHub secrets for submit, while EAS Secrets are used for cloud builds
+          ASC_APP_ID=$(echo "${EXPO_PUBLIC_ASC_APP_ID}" | tr -d '[:space:]')
           if [ -z "${ASC_APP_ID}" ]; then
-            echo "Missing ASC_APP_ID secret."
-            echo "Ensure ASC_APP_ID secret is set in GitHub Environment secrets."
+            echo "Missing EXPO_PUBLIC_ASC_APP_ID secret."
+            echo "Ensure EXPO_PUBLIC_ASC_APP_ID is set in GitHub Environment secrets."
+            echo "Note: EAS Secrets are used for builds, but GitHub secrets are needed for local submit execution."
             exit 1
           fi
 
@@ -117,12 +117,31 @@ jobs:
           echo "Issuer ID: ${EXPO_APPLE_ISSUER_ID}"
           echo "ASC App ID: ${ASC_APP_ID}"
 
-          eas submit --platform ios --profile ${{ steps.profile.outputs.profile }} --latest --non-interactive --asc-app-id "${ASC_APP_ID}"
+          # Update eas.json with the ASC App ID for the current profile
+          # EAS doesn't support environment variable substitution in submit section
+          PROFILE="${{ steps.profile.outputs.profile }}"
+          # Install jq for reliable JSON manipulation
+          sudo apt-get update && sudo apt-get install -y jq || true
+          if command -v jq &> /dev/null; then
+            # Use jq if available (more reliable)
+            jq --arg appId "${ASC_APP_ID}" ".submit.${PROFILE}.ios.ascAppId = \$appId" eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          else
+            # Fallback to sed if jq is not available
+            if [[ "${PROFILE}" == "production" ]]; then
+              sed -i.bak "s/\"ascAppId\": \".*\"/\"ascAppId\": \"${ASC_APP_ID}\"/" eas.json
+            else
+              sed -i.bak "s/\"ascAppId\": \".*\"/\"ascAppId\": \"${ASC_APP_ID}\"/" eas.json
+            fi
+            rm -f eas.json.bak
+          fi
+
+          eas submit --platform ios --profile ${PROFILE} --latest --non-interactive
         env:
           # App Store Connect API key credentials
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
           EXPO_APPLE_ISSUER_ID: ${{ secrets.EXPO_APPLE_ISSUER_ID }}
           EXPO_APPLE_KEY_CONTENT: ${{ secrets.EXPO_APPLE_KEY_CONTENT }}
-          # ASC App ID - use EXPO_PUBLIC_ASC_APP_ID from environment secrets
-          ASC_APP_ID: ${{ secrets.EXPO_PUBLIC_ASC_APP_ID }}
+          # ASC App ID - prefer GitHub secret for local submit execution
+          # EAS Secrets are available during cloud builds but not for local submit
+          EXPO_PUBLIC_ASC_APP_ID: ${{ secrets.EXPO_PUBLIC_ASC_APP_ID }}
 
