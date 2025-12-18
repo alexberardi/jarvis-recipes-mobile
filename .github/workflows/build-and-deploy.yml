@@ -169,7 +169,7 @@ jobs:
             rm -f eas.json.bak
           fi
 
-          eas submit --platform ios --profile ${PROFILE} --latest --non-interactive
+          eas submit --platform ios --profile ${PROFILE} --latest --non-interactive --no-wait
         env:
           # App Store Connect API key credentials
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
