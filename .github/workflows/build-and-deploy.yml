@@ -95,26 +95,38 @@ jobs:
             exit 1
           fi
 
-          # Fetch ASC App ID from EAS Secrets
-          # Try ASC_APP_ID first (secret), then fallback to EXPO_PUBLIC_ASC_APP_ID (plain text)
+          # Fetch ASC App ID - try EAS Secrets first, fallback to GitHub secret
+          # Since eas submit runs locally, EAS Secrets aren't automatically available
+          # We'll try to fetch from EAS, but GitHub secret is more reliable for local execution
           ASC_APP_ID=""
           PROFILE="${{ steps.profile.outputs.profile }}"
           
-          # Try to fetch from EAS Secrets using the EAS CLI
-          echo "Fetching ASC App ID from EAS Secrets..."
-          if EAS_SECRET=$(eas secret:list --json 2>/dev/null | jq -r ".[] | select(.name == \"ASC_APP_ID\") | .value" 2>/dev/null); then
-            if [ -n "${EAS_SECRET}" ] && [ "${EAS_SECRET}" != "null" ]; then
-              ASC_APP_ID="${EAS_SECRET}"
-              echo "Found ASC_APP_ID in EAS Secrets"
-            fi
+          echo "Fetching ASC App ID..."
+          
+          # First, try GitHub secret (most reliable for local submit execution)
+          if [ -n "${EXPO_PUBLIC_ASC_APP_ID}" ]; then
+            ASC_APP_ID="${EXPO_PUBLIC_ASC_APP_ID}"
+            echo "Using EXPO_PUBLIC_ASC_APP_ID from GitHub Environment secret"
           fi
           
-          # Fallback to EXPO_PUBLIC_ASC_APP_ID if ASC_APP_ID not found
+          # Try to fetch from EAS Secrets as alternative (may not work for all secret types)
           if [ -z "${ASC_APP_ID}" ]; then
-            if EAS_PUBLIC_SECRET=$(eas secret:list --json 2>/dev/null | jq -r ".[] | select(.name == \"EXPO_PUBLIC_ASC_APP_ID\") | .value" 2>/dev/null); then
+            echo "Attempting to fetch from EAS Secrets..."
+            # Try EXPO_PUBLIC_ASC_APP_ID first (plain text, more likely to be accessible)
+            if EAS_PUBLIC_SECRET=$(eas secret:get EXPO_PUBLIC_ASC_APP_ID --non-interactive 2>/dev/null); then
               if [ -n "${EAS_PUBLIC_SECRET}" ] && [ "${EAS_PUBLIC_SECRET}" != "null" ]; then
                 ASC_APP_ID="${EAS_PUBLIC_SECRET}"
                 echo "Found EXPO_PUBLIC_ASC_APP_ID in EAS Secrets"
+              fi
+            fi
+            
+            # Try ASC_APP_ID as fallback
+            if [ -z "${ASC_APP_ID}" ]; then
+              if EAS_SECRET=$(eas secret:get ASC_APP_ID --non-interactive 2>/dev/null); then
+                if [ -n "${EAS_SECRET}" ] && [ "${EAS_SECRET}" != "null" ]; then
+                  ASC_APP_ID="${EAS_SECRET}"
+                  echo "Found ASC_APP_ID in EAS Secrets"
+                fi
               fi
             fi
           fi
@@ -122,8 +134,10 @@ jobs:
           # Validate and trim ASC App ID
           ASC_APP_ID=$(echo "${ASC_APP_ID}" | tr -d '[:space:]')
           if [ -z "${ASC_APP_ID}" ]; then
-            echo "Missing ASC App ID from EAS Secrets."
-            echo "Ensure either ASC_APP_ID or EXPO_PUBLIC_ASC_APP_ID is set in Expo EAS Secrets."
+            echo "Error: Could not find ASC App ID."
+            echo "Ensure EXPO_PUBLIC_ASC_APP_ID is set in either:"
+            echo "  1. GitHub Environment secrets (recommended for submit)"
+            echo "  2. Expo EAS Secrets (ASC_APP_ID or EXPO_PUBLIC_ASC_APP_ID)"
             exit 1
           fi
 
@@ -161,4 +175,7 @@ jobs:
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
           EXPO_APPLE_ISSUER_ID: ${{ secrets.EXPO_APPLE_ISSUER_ID }}
           EXPO_APPLE_KEY_CONTENT: ${{ secrets.EXPO_APPLE_KEY_CONTENT }}
+          # ASC App ID - GitHub secret as primary source for local submit execution
+          # EAS Secrets are used for cloud builds, but GitHub secrets are needed for local submit
+          EXPO_PUBLIC_ASC_APP_ID: ${{ secrets.EXPO_PUBLIC_ASC_APP_ID }}
 
