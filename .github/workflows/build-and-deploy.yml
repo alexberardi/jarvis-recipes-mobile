@@ -1,0 +1,76 @@
+name: Build and Deploy to TestFlight
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile (preview or production)'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy iOS App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "You must provide an EXPO_TOKEN secret linked to this project's Expo account in this repo's secrets. Learn more: https://docs.expo.dev/eas-update/github-actions"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine build profile
+        id: profile
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "profile=production" >> $GITHUB_OUTPUT
+          else
+            echo "profile=preview" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build iOS app
+        run: |
+          eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --non-interactive --no-wait
+        env:
+          # Override environment variables if needed
+          EXPO_PUBLIC_AUTH_API_BASE_URL: ${{ secrets.AUTH_API_BASE_URL }}
+          EXPO_PUBLIC_RECIPES_API_BASE_URL: ${{ secrets.RECIPES_API_BASE_URL }}
+
+      - name: Submit to TestFlight (Production only)
+        if: steps.profile.outputs.profile == 'production'
+        run: |
+          eas submit --platform ios --profile production --latest --non-interactive
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+

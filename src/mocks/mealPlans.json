@@ -1,0 +1,13 @@
+{
+  "weekOf": "2025-01-06",
+  "meals": [
+    { "id": "mon-dinner", "day": "Monday", "mealType": "Dinner", "recipeId": "weeknight-chicken-tacos" },
+    { "id": "tue-dinner", "day": "Tuesday", "mealType": "Dinner", "recipeId": "sheet-pan-salmon" },
+    { "id": "wed-dinner", "day": "Wednesday", "mealType": "Dinner", "recipeId": "veggie-stir-fry" },
+    { "id": "thu-dinner", "day": "Thursday", "mealType": "Dinner", "recipeId": "mediterranean-quinoa-salad" },
+    { "id": "fri-dinner", "day": "Friday", "mealType": "Dinner", "recipeId": "weeknight-chicken-tacos" },
+    { "id": "sat-lunch", "day": "Saturday", "mealType": "Lunch", "recipeId": "mediterranean-quinoa-salad" },
+    { "id": "sun-dinner", "day": "Sunday", "mealType": "Dinner", "recipeId": "sheet-pan-salmon" }
+  ]
+}
+
