@@ -85,15 +85,33 @@ jobs:
       - name: Build iOS app
         id: build
         run: |
+          set -euo pipefail
+
           # Build and WAIT so we get a new finished build for this run.
-          # Output JSON so we can capture the build ID deterministically.
+          # IMPORTANT: Do NOT capture eas output in a variable; it hides useful logs.
           sudo apt-get update && sudo apt-get install -y jq || true
 
-          BUILD_JSON=$(eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --environment ${{ steps.profile.outputs.eas_env }} --non-interactive --json)
-          echo "$BUILD_JSON" > build.json
+          echo "Selected profile: ${{ steps.profile.outputs.profile }}"
+          echo "Selected EAS environment: ${{ steps.profile.outputs.eas_env }}"
+          eas --version || true
+
+          # Write JSON to file; allow stderr to stream so we can see real failures in Actions logs.
+          rm -f build.json
+          eas build \
+            --platform ios \
+            --profile ${{ steps.profile.outputs.profile }} \
+            --environment ${{ steps.profile.outputs.eas_env }} \
+            --non-interactive \
+            --json \
+            > build.json
+
+          if [ ! -s build.json ]; then
+            echo "eas build produced no JSON output. See logs above."
+            exit 1
+          fi
 
           # EAS returns an array; take the first build.
-          BUILD_ID=$(cat build.json | jq -r '.[0].id')
+          BUILD_ID=$(jq -r '.[0].id' build.json)
           if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
             echo "Failed to parse build id from eas build output"
             cat build.json
