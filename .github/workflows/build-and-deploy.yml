@@ -59,13 +59,28 @@ jobs:
       - name: Determine build profile
         id: profile
         run: |
+          # Build profile controls eas.json build settings
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+            PROFILE="${{ github.event.inputs.profile }}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "profile=production" >> $GITHUB_OUTPUT
+            PROFILE="production"
           else
-            echo "profile=preview" >> $GITHUB_OUTPUT
+            PROFILE="preview"
           fi
+
+          # EAS environment controls which Expo Environment Variables bucket is used
+          # Only use production env vars on tags; otherwise use preview env vars.
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            EAS_ENV="production"
+          else
+            EAS_ENV="preview"
+          fi
+
+          echo "profile=${PROFILE}" >> $GITHUB_OUTPUT
+          echo "eas_env=${EAS_ENV}" >> $GITHUB_OUTPUT
+
+          echo "Selected profile: ${PROFILE}"
+          echo "Selected EAS environment: ${EAS_ENV}"
 
       - name: Build iOS app
         id: build
@@ -74,7 +89,7 @@ jobs:
           # Output JSON so we can capture the build ID deterministically.
           sudo apt-get update && sudo apt-get install -y jq || true
 
-          BUILD_JSON=$(eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --non-interactive --json)
+          BUILD_JSON=$(eas build --platform ios --profile ${{ steps.profile.outputs.profile }} --environment ${{ steps.profile.outputs.eas_env }} --non-interactive --json)
           echo "$BUILD_JSON" > build.json
 
           # EAS returns an array; take the first build.
@@ -115,6 +130,7 @@ jobs:
           # We'll try to fetch from EAS, but GitHub secret is more reliable for local execution
           ASC_APP_ID=""
           PROFILE="${{ steps.profile.outputs.profile }}"
+          echo "Using EAS environment: ${{ steps.profile.outputs.eas_env }}"
           
           echo "Fetching ASC App ID..."
           
@@ -185,7 +201,7 @@ jobs:
             rm -f eas.json.bak
           fi
 
-          eas submit --platform ios --profile ${PROFILE} --id ${{ steps.build.outputs.build_id }} --non-interactive --no-wait
+          eas submit --platform ios --profile ${PROFILE} --environment ${{ steps.profile.outputs.eas_env }} --id ${{ steps.build.outputs.build_id }} --non-interactive --no-wait
         env:
           # App Store Connect API key credentials
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
