@@ -71,19 +71,9 @@ jobs:
             PROFILE="preview"
           fi
 
-          # EAS environment controls which Expo Environment Variables bucket is used
-          # Only use production env vars on tags; otherwise use preview env vars.
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            EAS_ENV="production"
-          else
-            EAS_ENV="preview"
-          fi
-
           echo "profile=${PROFILE}" >> $GITHUB_OUTPUT
-          echo "eas_env=${EAS_ENV}" >> $GITHUB_OUTPUT
 
           echo "Selected profile: ${PROFILE}"
-          echo "Selected EAS environment: ${EAS_ENV}"
 
       - name: Diagnostics
         run: |
@@ -106,7 +96,6 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
 
           echo "Selected profile: ${{ steps.profile.outputs.profile }}"
-          echo "Selected EAS environment: ${{ steps.profile.outputs.eas_env }}"
           eas --version
 
           # Print auth + project linkage info in the same step so failures are visible.
@@ -119,10 +108,8 @@ jobs:
           eas build \
             --platform ios \
             --profile ${{ steps.profile.outputs.profile }} \
-            --environment ${{ steps.profile.outputs.eas_env }} \
             --non-interactive \
             --json \
-            --verbose \
             | tee build.json
 
           if [ ! -s build.json ]; then
@@ -242,7 +229,7 @@ jobs:
             rm -f eas.json.bak
           fi
 
-          eas submit --platform ios --profile ${PROFILE} --environment ${{ steps.profile.outputs.eas_env }} --id ${{ steps.build.outputs.build_id }} --non-interactive --no-wait
+          eas submit --platform ios --profile ${PROFILE} --id ${{ steps.build.outputs.build_id }} --non-interactive --no-wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
