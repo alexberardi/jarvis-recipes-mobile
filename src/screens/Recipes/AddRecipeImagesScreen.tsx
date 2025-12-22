@@ -66,7 +66,7 @@ const AddRecipeImagesScreen = ({ navigation }: Props) => {
       const res = await ImagePicker.launchImageLibraryAsync({
         allowsMultipleSelection: true,
         selectionLimit: remaining,
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
       });
       if (res.canceled || !res.assets) return;
       addImages(res.assets);
@@ -90,7 +90,7 @@ const AddRecipeImagesScreen = ({ navigation }: Props) => {
         return;
       }
       const res = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
       });
       if (res.canceled || !res.assets) return;
       addImages(res.assets);

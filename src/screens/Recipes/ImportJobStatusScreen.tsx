@@ -5,7 +5,7 @@ import { Appbar, Button, HelperText, Text } from 'react-native-paper';
 
 import LoadingIndicator from '../../components/LoadingIndicator';
 import { RecipesStackParamList } from '../../navigation/types';
-import { getParseJobStatus } from '../../services/parseRecipe';
+import { getParseJobStatus, cancelJob } from '../../services/parseRecipe';
 import { clearActiveJob, saveActiveJob, pollWithBackoff } from '../../services/jobPolling';
 import { mapParsedRecipeToParams, mapRecipeDraftToParsed } from './mappers';
 import {
@@ -20,7 +20,9 @@ type Props = NativeStackScreenProps<RecipesStackParamList, 'ImportJobStatus'>;
 const ImportJobStatusScreen = ({ navigation, route }: Props) => {
   const { jobId, sourceUrl, jobType, startedAt } = route.params ?? {};
   const [status, setStatus] = useState<string>('PENDING');
-  const [message, setMessage] = useState<string>('Import in progress…');
+  const [message] = useState<string>(
+    'Processing your recipe. This could take a little while. Stay on this screen to get live updates or check your mailbox later for the results',
+  );
   const [error, setError] = useState<string | null>(null);
   const [handling, setHandling] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -153,11 +155,43 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
     navigation.replace('ImportJobStatus', { jobId, jobType, sourceUrl, startedAt: Date.now() });
   };
 
+  const handleGoHome = () => {
+    // Navigate back to RecipesList without canceling the job
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'RecipesList' }],
+    });
+  };
+
   const handleCancel = async () => {
-    if (handling) return;
-    setHandling(true);
-    await clearActiveJob();
-    navigation.goBack();
+    if (handling || !jobId) return;
+    
+    Alert.alert(
+      'Cancel import?',
+      'This will cancel the recipe import job.',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setHandling(true);
+            try {
+              await cancelJob(jobId);
+              await clearActiveJob();
+              // Navigate back to RecipesList
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'RecipesList' }],
+              });
+            } catch (err: any) {
+              setError(err?.response?.data?.detail || err?.message || 'Unable to cancel job.');
+              setHandling(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const isLoading = status === 'PENDING' || status === 'RUNNING';
@@ -173,6 +207,9 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
           <>
             <LoadingIndicator />
             <Text style={styles.center}>{message}</Text>
+            <Button mode="outlined" onPress={handleGoHome}>
+              Go Home
+            </Button>
             <Button onPress={handleCancel}>Cancel</Button>
           </>
         ) : error ? (

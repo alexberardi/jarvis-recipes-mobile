@@ -13,6 +13,29 @@ export const createRecipe = async (payload: RecipeCreate & { parse_job_id?: stri
   return recipesRequest<Recipe>({ url: '/recipes', method: 'POST', data: payload });
 };
 
+export type RecipeUpdate = {
+  title?: string;
+  description?: string | null;
+  servings?: number | null;
+  prep_time_minutes?: number | null;
+  cook_time_minutes?: number | null;
+  total_time_minutes?: number | null;
+  source_type?: 'manual' | 'image' | 'url';
+  source_url?: string | null;
+  image_url?: string | null;
+  ingredients?: { text: string; quantity_display?: string | null; unit?: string | null }[];
+  steps?: { step_number: number; text: string }[];
+  tags?: string[];
+};
+
+export const updateRecipe = async (id: number, payload: RecipeUpdate): Promise<Recipe> => {
+  return recipesRequest<Recipe>({ url: `/recipes/${id}`, method: 'PATCH', data: payload });
+};
+
+export const deleteRecipe = async (id: number): Promise<void> => {
+  return recipesRequest<void>({ url: `/recipes/${id}`, method: 'DELETE' });
+};
+
 export const uploadRecipeImage = async (file: {
   uri: string;
   name?: string;

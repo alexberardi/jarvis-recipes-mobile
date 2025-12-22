@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Appbar, Badge, Button, Text } from 'react-native-paper';
@@ -10,6 +11,7 @@ import { useSeenJobs } from '../../hooks/useSeenJobs';
 import { getParseJobs } from '../../services/parseRecipe';
 import { RecipesStackParamList } from '../../navigation/types';
 import { loadActiveJob, clearActiveJob } from '../../services/jobPolling';
+import { Recipe } from '../../types/Recipe';
 
 type Props = NativeStackScreenProps<RecipesStackParamList, 'RecipesList'>;
 
@@ -19,21 +21,26 @@ const RecipesListScreen = ({ navigation }: Props) => {
   const [jobsCount, setJobsCount] = useState(0);
   const [unseenCount, setUnseenCount] = useState(0);
 
-  useEffect(() => {
-    const loadMailbox = async () => {
-      try {
-        const res = await getParseJobs();
-        const total = res.jobs?.length ?? 0;
-        const unseen = res.jobs?.filter((j) => !seen[j.id]).length ?? 0;
-        setJobsCount(total);
-        setUnseenCount(unseen);
-      } catch {
-        setJobsCount(0);
-        setUnseenCount(0);
-      }
-    };
-    if (ready) loadMailbox();
+  const loadMailbox = useCallback(async () => {
+    if (!ready) return;
+    try {
+      const res = await getParseJobs();
+      const total = res.jobs?.length ?? 0;
+      const unseen = res.jobs?.filter((j) => !seen[j.id]).length ?? 0;
+      setJobsCount(total);
+      setUnseenCount(unseen);
+    } catch {
+      setJobsCount(0);
+      setUnseenCount(0);
+    }
   }, [ready, seen]);
+
+  // Load mailbox count when screen comes into focus (e.g., after returning from Mailbox)
+  useFocusEffect(
+    useCallback(() => {
+      loadMailbox();
+    }, [loadMailbox]),
+  );
 
   const handleAddRecipe = () => {
     navigation.navigate('AddRecipeMode');
@@ -50,7 +57,7 @@ const RecipesListScreen = ({ navigation }: Props) => {
         navigation.navigate('ImportJobStatus', {
           jobId: job.jobId,
           jobType: job.jobType,
-          sourceUrl: job.sourceUrl,
+          sourceUrl: job.sourceUrl ?? undefined,
           startedAt: job.startedAt,
         });
       } else {
@@ -61,7 +68,7 @@ const RecipesListScreen = ({ navigation }: Props) => {
   }, [navigation]);
 
   const renderItem = useCallback(
-    ({ item }) => (
+    ({ item }: { item: Recipe }) => (
       <RecipeCard
         recipe={item}
         onPress={() => navigation.navigate('RecipeDetail', { id: item.id })}
@@ -75,7 +82,7 @@ const RecipesListScreen = ({ navigation }: Props) => {
       <Appbar.Header>
         <Appbar.Content title="Recipes" />
         <View>
-          <Appbar.Action icon="bell-outline" onPress={handleOpenMailbox} />
+          <Appbar.Action icon="mailbox-outline" onPress={handleOpenMailbox} />
           {unseenCount > 0 ? <Badge style={styles.badge}>{unseenCount}</Badge> : null}
         </View>
         <Appbar.Action icon="plus" onPress={handleAddRecipe} />

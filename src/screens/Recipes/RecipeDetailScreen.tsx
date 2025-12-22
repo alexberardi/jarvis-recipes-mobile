@@ -1,4 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Card, Chip, List, Text } from 'react-native-paper';
 
@@ -9,13 +11,27 @@ import { RecipesStackParamList } from '../../navigation/types';
 type Props = NativeStackScreenProps<RecipesStackParamList, 'RecipeDetail'>;
 
 const RecipeDetailScreen = ({ route, navigation }: Props) => {
-  const { data: recipe, isLoading } = useRecipe(route.params.id);
+  const { data: recipe, isLoading, refetch } = useRecipe(route.params.id);
+
+  // Refetch recipe data when screen comes into focus (e.g., after editing)
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
 
   return (
     <>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => navigation.goBack()} />
         <Appbar.Content title={recipe?.title ?? 'Recipe Detail'} />
+        {recipe && (
+          <Appbar.Action
+            icon="pencil"
+            onPress={() => navigation.navigate('CreateRecipe', { recipeId: recipe.id } as any)}
+            accessibilityLabel="Edit recipe"
+          />
+        )}
       </Appbar.Header>
       {isLoading ? (
         <LoadingIndicator />
@@ -26,30 +42,32 @@ const RecipeDetailScreen = ({ route, navigation }: Props) => {
       ) : (
         <ScrollView contentContainerStyle={styles.container}>
           <Card style={styles.card}>
-            <Card.Cover
-              source={
-                recipe.image_url
-                  ? { uri: recipe.image_url }
-                  : require('../../../assets/recipes/placeholder.png')
-              }
-            />
-            <Card.Content>
-              <Text variant="headlineSmall" style={styles.title}>
-                {recipe.title}
-              </Text>
-              {recipe.description ? (
-                <Text variant="bodyMedium" style={styles.description}>
-                  {recipe.description}
+            <View style={styles.cardContent}>
+              <Card.Cover
+                source={
+                  recipe.image_url
+                    ? { uri: recipe.image_url }
+                    : require('../../../assets/recipes/placeholder.png')
+                }
+              />
+              <Card.Content>
+                <Text variant="headlineSmall" style={styles.title}>
+                  {recipe.title}
                 </Text>
-              ) : null}
-              <View style={styles.tags}>
-                {recipe.tags.map((tag) => (
-                  <Chip key={tag.id} compact style={styles.chip}>
-                    {tag.name}
-                  </Chip>
-                ))}
-              </View>
-            </Card.Content>
+                {recipe.description ? (
+                  <Text variant="bodyMedium" style={styles.description}>
+                    {recipe.description}
+                  </Text>
+                ) : null}
+                <View style={styles.tags}>
+                  {recipe.tags.map((tag) => (
+                    <Chip key={tag.id} compact style={styles.chip}>
+                      {tag.name}
+                    </Chip>
+                  ))}
+                </View>
+              </Card.Content>
+            </View>
           </Card>
 
           <List.Section title="Ingredients">
@@ -84,6 +102,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   card: {
+    borderRadius: 12,
+  },
+  cardContent: {
     borderRadius: 12,
     overflow: 'hidden',
   },

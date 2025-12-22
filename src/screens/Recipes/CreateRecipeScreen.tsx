@@ -18,16 +18,18 @@ import {
   Chip,
   HelperText,
   IconButton,
+  Portal,
+  Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
 import type { TextInput as PaperTextInput } from 'react-native-paper';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { createRecipe, uploadRecipeImage } from '../../services/recipes';
-import { abandonParseJob } from '../../services/parseRecipe';
+import { createRecipe, updateRecipe, deleteRecipe, uploadRecipeImage, RecipeUpdate } from '../../services/recipes';
+import { cancelJob } from '../../services/parseRecipe';
 import { useTags } from '../../hooks/useTags';
-import { RECIPES_QUERY_KEY } from '../../hooks/useRecipes';
+import { RECIPES_QUERY_KEY, useRecipe } from '../../hooks/useRecipes';
 import {
   getStockIngredients,
   getStockUnits,
@@ -36,6 +38,7 @@ import {
 } from '../../services/stockData';
 import { NewIngredient, Recipe, RecipeCreate } from '../../types/Recipe';
 import { RecipesStackParamList } from '../../navigation/types';
+import LoadingIndicator from '../../components/LoadingIndicator';
 
 type Props = NativeStackScreenProps<RecipesStackParamList, 'CreateRecipe'>;
 
@@ -46,24 +49,32 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
   const { data: tagOptions } = useTags();
   const presetQty = ['1/4', '1/3', '1/2', '3/4', '1', '1 1/2', '2', '3'];
 
+  const recipeId = (route.params as any)?.recipeId as number | undefined;
   const initialRecipe = (route.params as any)?.initialRecipe;
   const parseWarnings = (route.params as any)?.parseWarnings as string[] | undefined;
   const parseJobId = (route.params as any)?.parseJobId as string | undefined;
-  const [title, setTitle] = useState(initialRecipe?.title ?? '');
-  const [description, setDescription] = useState(initialRecipe?.description ?? '');
+  
+  // Load recipe if in edit mode
+  const { data: editRecipe, isLoading: loadingRecipe } = useRecipe(recipeId);
+  const isEditMode = Boolean(recipeId);
+  
+  // Use edit recipe data if available, otherwise use initial recipe
+  const recipeData = editRecipe || initialRecipe;
+  const [title, setTitle] = useState(recipeData?.title ?? '');
+  const [description, setDescription] = useState(recipeData?.description ?? '');
   const [prepMinutes, setPrepMinutes] = useState(
-    initialRecipe?.prepMinutes != null ? String(initialRecipe.prepMinutes) : '',
+    recipeData?.prepMinutes != null ? String(recipeData.prepMinutes) : '',
   );
   const [cookMinutes, setCookMinutes] = useState(
-    initialRecipe?.cookMinutes != null ? String(initialRecipe.cookMinutes) : '',
+    recipeData?.cookMinutes != null ? String(recipeData.cookMinutes) : '',
   );
   const [servings, setServings] = useState(
-    initialRecipe?.servings != null ? String(initialRecipe.servings) : '',
+    recipeData?.servings != null ? String(recipeData.servings) : '',
   );
   const [ingredients, setIngredients] = useState<NewIngredient[]>(
-    initialRecipe?.ingredients?.length
-      ? initialRecipe.ingredients.map((ing: any, idx: number) => ({
-          id: ing.id ?? `${Date.now()}-${idx}`,
+    recipeData?.ingredients?.length
+      ? recipeData.ingredients.map((ing: any, idx: number) => ({
+          id: ing.id ? String(ing.id) : `${Date.now()}-${idx}`,
           text: ing.text ?? '',
           quantityDisplay: ing.quantityDisplay ?? ing.quantity_display ?? '',
           unit: ing.unit ?? '',
@@ -71,13 +82,41 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
       : [{ id: generateId(), text: '', quantityDisplay: '', unit: '' }],
   );
   const [steps, setSteps] = useState<string[]>(
-    initialRecipe?.steps?.length ? initialRecipe.steps : [''],
+    recipeData?.steps?.length ? recipeData.steps.map((s: any) => s.text || s) : [''],
   );
   const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>(initialRecipe?.tags ?? []);
-  const [imageUrl, setImageUrl] = useState(initialRecipe?.imageUrl ?? '');
+  const [tags, setTags] = useState<string[]>(
+    recipeData?.tags?.map((t: any) => (typeof t === 'string' ? t : t.name)) ?? [],
+  );
+  const [imageUrl, setImageUrl] = useState(recipeData?.imageUrl ?? recipeData?.image_url ?? '');
+  
+  // Update state when recipe loads in edit mode
+  useEffect(() => {
+    if (editRecipe && isEditMode) {
+      setTitle(editRecipe.title);
+      setDescription(editRecipe.description ?? '');
+      setPrepMinutes(editRecipe.total_time_minutes != null ? String(editRecipe.total_time_minutes) : '');
+      setCookMinutes('');
+      setServings(editRecipe.servings != null ? String(editRecipe.servings) : '');
+      setIngredients(
+        editRecipe.ingredients.length
+          ? editRecipe.ingredients.map((ing, idx) => ({
+              id: String(ing.id),
+              text: ing.text,
+              quantityDisplay: null,
+              unit: null,
+            }))
+          : [{ id: generateId(), text: '', quantityDisplay: '', unit: '' }],
+      );
+      setSteps(editRecipe.steps.length ? editRecipe.steps.map((s) => s.text) : ['']);
+      setTags(editRecipe.tags.map((t) => t.name));
+      setImageUrl(editRecipe.image_url ?? '');
+    }
+  }, [editRecipe, isEditMode]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
   const [autocompleteAvailable, setAutocompleteAvailable] = useState(true);
   const [hasStockData, setHasStockData] = useState(true);
   const [focusedIngredientId, setFocusedIngredientId] = useState<string | null>(null);
@@ -134,6 +173,57 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
     },
   });
 
+  const { mutateAsync: updateRecipeMutation, isPending: isUpdating } = useMutation<
+    Recipe,
+    Error,
+    { id: number; payload: RecipeUpdate }
+  >({
+    mutationFn: ({ id, payload }) => updateRecipe(id, payload),
+    onSuccess: (recipe) => {
+      // Invalidate queries to refresh the RecipeDetail screen
+      queryClient.invalidateQueries({ queryKey: RECIPES_QUERY_KEY });
+      // Pop back to the existing RecipeDetail screen, which will refresh automatically
+      navigation.goBack();
+    },
+    onError: (err: any) => {
+      const message =
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Unable to update recipe. Please try again.';
+      const errorMsg = Array.isArray(message) ? message.join('\n') : message;
+      setSnackbarMessage(errorMsg);
+      setSnackbarVisible(true);
+    },
+  });
+
+  const { mutateAsync: deleteRecipeMutation, isPending: isDeleting } = useMutation<
+    void,
+    Error,
+    number
+  >({
+    mutationFn: deleteRecipe,
+    onSuccess: () => {
+      // Remove the specific recipe query from cache to prevent refetch
+      if (recipeId) {
+        queryClient.removeQueries({ queryKey: [...RECIPES_QUERY_KEY, recipeId] });
+      }
+      // Invalidate the recipes list to refresh it
+      queryClient.invalidateQueries({ queryKey: RECIPES_QUERY_KEY });
+      // Navigate back to recipes list
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'RecipesList' }],
+      });
+    },
+    onError: (err: any) => {
+      const message =
+        err?.response?.data?.detail || err?.message || 'Unable to delete recipe.';
+      const errorMsg = Array.isArray(message) ? message.join('\n') : message;
+      setSnackbarMessage(errorMsg);
+      setSnackbarVisible(true);
+    },
+  });
+
   const handleAddIngredient = () =>
     setIngredients((prev) => [
       ...prev,
@@ -174,7 +264,7 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       quality: 0.7,
     });
 
@@ -258,38 +348,124 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
     };
 
     try {
-      const recipe = await submitRecipe(payload);
-      navigation.replace('RecipeDetail', { id: recipe.id });
+      if (isEditMode && recipeId) {
+        const updatePayload: RecipeUpdate = {
+          title: title.trim(),
+          description: description.trim() || null,
+          prep_time_minutes: Number.isFinite(prep) ? prep : null,
+          cook_time_minutes: Number.isFinite(cook) ? cook : null,
+          total_time_minutes: totalMinutes ?? null,
+          servings: Number.isFinite(servingsNum) ? servingsNum : null,
+          source_type: 'manual',
+          source_url: null,
+          image_url: imageUrl.trim() || null,
+          ingredients: cleanedIngredients.map((ing) => ({
+            text: ing.text,
+            quantity_display: ing.quantityDisplay || undefined,
+            unit: ing.unit || undefined,
+          })),
+          steps: steps
+            .map((text) => text.trim())
+            .filter(Boolean)
+            .map((text, idx) => ({ step_number: idx + 1, text })),
+          tags,
+        };
+        // updateRecipeMutation handles success/error via onSuccess/onError callbacks
+        await updateRecipeMutation({ id: recipeId, payload: updatePayload });
+      } else {
+        const recipe = await submitRecipe(payload);
+        navigation.replace('RecipeDetail', { id: recipe.id });
+      }
     } catch (err: any) {
-      const detail =
-        err?.response?.data?.detail ||
-        err?.message ||
-        'Unable to create recipe. Please try again.';
-      setSubmitError(Array.isArray(detail) ? detail.join('\n') : detail);
+      // Error handling for create mode (update mode errors are handled in mutation onError)
+      // But also catch any unexpected errors from update mutation
+      if (isEditMode) {
+        // If update mutation throws (shouldn't happen, but just in case)
+        const message =
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Unable to update recipe. Please try again.';
+        const errorMsg = Array.isArray(message) ? message.join('\n') : message;
+        setSnackbarMessage(errorMsg);
+        setSnackbarVisible(true);
+      } else {
+        const detail =
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Unable to create recipe. Please try again.';
+        setSubmitError(Array.isArray(detail) ? detail.join('\n') : detail);
+      }
     }
   };
+
+  const handleDelete = () => {
+    if (!recipeId) return;
+    Alert.alert('Delete recipe?', 'This will permanently delete this recipe.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          // deleteRecipeMutation handles success/error via onSuccess/onError callbacks
+          await deleteRecipeMutation(recipeId);
+        },
+      },
+    ]);
+  };
+
+  // Show loading indicator while fetching recipe in edit mode
+  if (isEditMode && loadingRecipe) {
+    return (
+      <>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => navigation.goBack()} />
+          <Appbar.Content title="Edit Recipe" />
+        </Appbar.Header>
+        <LoadingIndicator />
+      </>
+    );
+  }
 
   return (
     <>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => navigation.goBack()} />
-        <Appbar.Content title="Create Recipe" />
-        {parseJobId ? (
+        <Appbar.Content title={isEditMode ? 'Edit Recipe' : 'Create Recipe'} />
+        {isEditMode && recipeId ? (
+          <>
+            <Appbar.Action
+              icon="content-save"
+              onPress={handleSubmit}
+              disabled={!canSubmit || isUpdating || isDeleting}
+              accessibilityLabel="Save recipe"
+            />
+            <Appbar.Action
+              icon="delete"
+              onPress={handleDelete}
+              disabled={isUpdating || isDeleting}
+              accessibilityLabel="Delete recipe"
+            />
+          </>
+        ) : parseJobId ? (
           <Appbar.Action
             icon="delete"
             onPress={() =>
-              Alert.alert('Discard import?', 'This will remove the imported recipe job.', [
+              Alert.alert('Cancel import?', 'This will cancel the recipe import job.', [
                 { text: 'Keep', style: 'cancel' },
                 {
-                  text: 'Discard job',
+                  text: 'Cancel',
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      await abandonParseJob(parseJobId);
-                      navigation.popToTop();
+                      await cancelJob(parseJobId);
+                      // Navigate back to RecipesList
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'RecipesList' }],
+                      });
                     } catch (err: any) {
                       setSubmitError(
-                        err?.response?.data?.detail || err?.message || 'Unable to discard job.',
+                        err?.response?.data?.detail || err?.message || 'Unable to cancel job.',
                       );
                     }
                   },
@@ -604,17 +780,37 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
             </HelperText>
           ) : null}
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            loading={isPending}
-            disabled={isPending || !canSubmit}
-            style={styles.submit}
-          >
-            Create Recipe
-          </Button>
+          {!isEditMode && (
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              loading={isPending}
+              disabled={isPending || !canSubmit}
+              style={styles.submit}
+            >
+              Create Recipe
+            </Button>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
+      {(isUpdating || isDeleting) && (
+        <View style={styles.loadingOverlay}>
+          <LoadingIndicator />
+        </View>
+      )}
+      <Portal>
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={4000}
+          action={{
+            label: 'Dismiss',
+            onPress: () => setSnackbarVisible(false),
+          }}
+        >
+          {snackbarMessage}
+        </Snackbar>
+      </Portal>
     </>
   );
 };
@@ -713,6 +909,20 @@ const styles = StyleSheet.create({
   },
   submit: {
     marginTop: 12,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  snackbar: {
+    zIndex: 2000,
   },
 });
 

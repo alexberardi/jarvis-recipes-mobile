@@ -7,7 +7,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 
 import LoadingIndicator from '../../components/LoadingIndicator';
 import { useSeenJobs } from '../../hooks/useSeenJobs';
-import { abandonParseJob, getParseJobs, getParseJobStatus } from '../../services/parseRecipe';
+import { cancelJob, getParseJobs, getParseJobStatus } from '../../services/parseRecipe';
 import { ParseJobPreview } from '../../types/ParseJob';
 import { RecipesStackParamList } from '../../navigation/types';
 import { ParsedRecipe } from '../../types/Recipe';
@@ -112,17 +112,22 @@ const MailboxScreen = ({ navigation }: Props) => {
   };
 
   const handleCancel = (job: ParseJobPreview) => {
-    Alert.alert('Discard this import?', 'This will remove the parsed recipe from your inbox.', [
+    Alert.alert('Cancel import?', 'This will cancel the recipe import job.', [
       { text: 'Keep', style: 'cancel' },
       {
-        text: 'Discard',
+        text: 'Cancel',
         style: 'destructive',
         onPress: async () => {
           try {
-            await abandonParseJob(job.id);
+            await cancelJob(job.id);
+            // Optimistically remove from list for better UX
             setJobs((prev) => prev.filter((j) => j.id !== job.id));
+            // Re-fetch to ensure consistency with server
+            await fetchJobs();
           } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || 'Unable to discard job.');
+            setError(err?.response?.data?.detail || err?.message || 'Unable to cancel job.');
+            // Re-fetch on error to ensure list is up to date
+            await fetchJobs();
           }
         },
       },
@@ -185,7 +190,13 @@ const MailboxScreen = ({ navigation }: Props) => {
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true) && fetchJobs()} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  fetchJobs();
+                }}
+              />
             }
           />
         )}

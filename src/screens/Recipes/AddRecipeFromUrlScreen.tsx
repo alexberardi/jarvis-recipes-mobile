@@ -28,25 +28,11 @@ const AddRecipeFromUrlScreen = ({ navigation, route }: Props) => {
     }
 
     try {
-      const job = await mutateAsync(trimmed);
-      if (!job?.id) {
-        setError('Unable to start import. Please try again.');
-        return;
-      }
-      navigation.replace('ImportJobStatus', {
-        jobId: job.id,
-        sourceUrl: trimmed,
-        jobType: 'url',
-        startedAt: Date.now(),
-      });
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      const isFetchFailed =
-        detail?.error_code === 'fetch_failed' &&
-        detail?.status_code === 403 &&
-        detail?.message?.toLowerCase?.().includes('status 403');
-
-      if (isFetchFailed) {
+      const response = await mutateAsync(trimmed);
+      
+      // Per PRD: parse-url/async now always returns next_action="webview_extract"
+      // We should NOT poll this job, but proceed directly to webview extraction
+      if (response?.next_action === 'webview_extract') {
         let domain: string | undefined;
         try {
           domain = new URL(trimmed).hostname;
@@ -57,7 +43,22 @@ const AddRecipeFromUrlScreen = ({ navigation, route }: Props) => {
         return;
       }
 
+      // Fallback: if somehow next_action is not present, show error
+      // This shouldn't happen per the new API contract, but handle gracefully
+      setError('Unable to start import. Please try again.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      
+      // Handle URL validation errors (per PRD)
+      if (detail?.error_code === 'invalid_url' || detail?.error_code === 'fetch_failed' || detail?.error_code === 'unsupported_content_type') {
+        const message = detail?.message || detail?.error_code || 'Invalid URL or site is unreachable.';
+        setError(message);
+        return;
+      }
+
+      // For other errors, show the error message
       const raw =
+        detail?.message ||
         detail ||
         err?.response?.data?.detail ||
         err?.message ||
