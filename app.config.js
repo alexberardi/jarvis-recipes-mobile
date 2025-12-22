@@ -17,6 +17,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.jarvisautomation.jarvisrecipesmobile',
+      buildNumber: '8', // Start at 8 since last uploaded was 7, autoIncrement will handle future builds
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
