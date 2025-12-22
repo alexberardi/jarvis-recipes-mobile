@@ -52,6 +52,9 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
         run: npm install
@@ -82,20 +85,36 @@ jobs:
           echo "Selected profile: ${PROFILE}"
           echo "Selected EAS environment: ${EAS_ENV}"
 
+      - name: Diagnostics
+        run: |
+          node -v
+          npm -v
+          eas --version
+          npx expo whoami || true
+          eas whoami || true
+          eas project:info || true
+          eas env:list || true
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build iOS app
         id: build
         run: |
           set -euo pipefail
 
-          # Build and WAIT so we get a new finished build for this run.
-          # IMPORTANT: Do NOT capture eas output in a variable; it hides useful logs.
-          sudo apt-get update && sudo apt-get install -y jq || true
+          sudo apt-get update && sudo apt-get install -y jq
 
           echo "Selected profile: ${{ steps.profile.outputs.profile }}"
           echo "Selected EAS environment: ${{ steps.profile.outputs.eas_env }}"
-          eas --version || true
+          eas --version
 
-          # Write JSON to file; allow stderr to stream so we can see real failures in Actions logs.
+          # Print auth + project linkage info in the same step so failures are visible.
+          npx expo whoami || true
+          eas whoami || true
+          eas project:info || true
+
+          # Run build with verbose logs and ALSO capture JSON output.
           rm -f build.json
           eas build \
             --platform ios \
@@ -103,7 +122,8 @@ jobs:
             --environment ${{ steps.profile.outputs.eas_env }} \
             --non-interactive \
             --json \
-            > build.json
+            --verbose \
+            | tee build.json
 
           if [ ! -s build.json ]; then
             echo "eas build produced no JSON output. See logs above."
@@ -120,6 +140,9 @@ jobs:
 
           echo "Build created: $BUILD_ID"
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Submit to TestFlight
         id: submit
@@ -221,6 +244,8 @@ jobs:
 
           eas submit --platform ios --profile ${PROFILE} --environment ${{ steps.profile.outputs.eas_env }} --id ${{ steps.build.outputs.build_id }} --non-interactive --no-wait
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_ACCESS_TOKEN: ${{ secrets.EXPO_TOKEN }}
           # App Store Connect API key credentials
           EXPO_APPLE_KEY_ID: ${{ secrets.EXPO_APPLE_KEY_ID }}
           EXPO_APPLE_ISSUER_ID: ${{ secrets.EXPO_APPLE_ISSUER_ID }}
