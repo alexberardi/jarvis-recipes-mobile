@@ -13,8 +13,20 @@
         "EXPO_PUBLIC_RECIPES_API_BASE_URL": "http://localhost:8001"
       }
     },
-    "preview": {
+    "preview_internal": {
       "distribution": "internal",
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_AUTH_API_BASE_URL": "${EXPO_PUBLIC_AUTH_API_BASE_URL}",
+        "EXPO_PUBLIC_RECIPES_API_BASE_URL": "${EXPO_PUBLIC_RECIPES_API_BASE_URL}",
+        "EXPO_PUBLIC_ASC_APP_ID": "${EXPO_PUBLIC_ASC_APP_ID}"
+      }
+    },
+    "preview": {
+      "distribution": "store",
       "autoIncrement": true,
       "ios": {
         "simulator": false
@@ -43,4 +55,3 @@
     }
   }
 }
-
