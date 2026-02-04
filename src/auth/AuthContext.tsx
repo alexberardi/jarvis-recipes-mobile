@@ -61,7 +61,8 @@ const parseUser = (value: string | null): AuthUser | null => {
   if (!value) return null;
   try {
     return JSON.parse(value) as AuthUser;
-  } catch {
+  } catch (error) {
+    console.warn('[AuthContext] Failed to parse stored user:', error instanceof Error ? error.message : String(error));
     return null;
   }
 };
@@ -145,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]);
       return newAccess;
     } catch (error) {
+      console.warn('[AuthContext] Token refresh failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }, [state.refreshToken]);
@@ -175,6 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (error) {
+      console.warn('[AuthContext] Bootstrap auth failed:', error instanceof Error ? error.message : String(error));
       setState({
         ...initialState,
         isLoading: false,

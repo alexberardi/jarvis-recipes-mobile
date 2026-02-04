@@ -37,7 +37,8 @@ const loadCache = async () => {
     ingredientsCache = ingredientsRaw[1] ? JSON.parse(ingredientsRaw[1]) : [];
     unitsCache = unitsRaw[1] ? JSON.parse(unitsRaw[1]) : [];
     lastFetched = fetchedRaw[1] ? Number(fetchedRaw[1]) || 0 : 0;
-  } catch {
+  } catch (error) {
+    console.warn('[stockData] Failed to load cache:', error instanceof Error ? error.message : String(error));
     ingredientsCache = [];
     unitsCache = [];
     lastFetched = 0;
@@ -53,8 +54,8 @@ const saveCache = async () => {
       [UNIT_KEY, JSON.stringify(unitsCache)],
       [FETCHED_KEY, String(lastFetched)],
     ]);
-  } catch {
-    // best effort
+  } catch (error) {
+    console.warn('[stockData] Failed to save cache:', error instanceof Error ? error.message : String(error));
   }
 };
 

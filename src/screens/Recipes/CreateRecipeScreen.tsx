@@ -149,7 +149,8 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
         const hasData = Boolean((ings && ings.length) || (units && units.length));
         setHasStockData(hasData);
         setAutocompleteAvailable(hasData);
-      } catch {
+      } catch (error) {
+        console.warn('[CreateRecipe] Failed to load stock data:', error instanceof Error ? error.message : String(error));
         setHasStockData(false);
         setAutocompleteAvailable(false);
       }

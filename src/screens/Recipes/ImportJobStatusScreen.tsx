@@ -30,7 +30,8 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
   const domain = sourceUrl ? (() => {
     try {
       return new URL(sourceUrl).hostname;
-    } catch {
+    } catch (error) {
+      console.warn('[ImportJobStatus] Failed to parse source URL hostname:', error instanceof Error ? error.message : String(error));
       return undefined;
     }
   })() : undefined;

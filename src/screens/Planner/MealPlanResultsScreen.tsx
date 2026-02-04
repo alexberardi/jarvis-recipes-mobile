@@ -50,8 +50,8 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
           recipesToFetch.map(async ({ source, id }) => {
             try {
               await fetchRecipe(source, id);
-            } catch {
-              // Ignore errors for individual recipes
+            } catch (error) {
+              console.warn('[MealPlanResults] Failed to fetch recipe:', source, id, error instanceof Error ? error.message : String(error));
             }
           }),
         );
@@ -204,8 +204,8 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
                                     params: { id: rec.id },
                                   });
                                 }
-                              } catch {
-                                // ignore for now
+                              } catch (error) {
+                                console.warn('[MealPlanResults] Failed to navigate to recipe:', error instanceof Error ? error.message : String(error));
                               }
                             }}
                             style={styles.recipeButton}

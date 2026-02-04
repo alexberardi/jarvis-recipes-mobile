@@ -30,7 +30,8 @@ export const computePayloadHash = async (jsonld: string[], htmlSnippet?: string)
     const combined = jsonld.join('') + (htmlSnippet ?? '');
     const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, combined);
     return digest;
-  } catch {
+  } catch (error) {
+    console.warn('[webviewExtraction] Failed to compute payload hash:', error instanceof Error ? error.message : String(error));
     return undefined;
   }
 };

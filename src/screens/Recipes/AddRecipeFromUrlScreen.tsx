@@ -36,7 +36,8 @@ const AddRecipeFromUrlScreen = ({ navigation, route }: Props) => {
         let domain: string | undefined;
         try {
           domain = new URL(trimmed).hostname;
-        } catch {
+        } catch (error) {
+          console.warn('[AddRecipeFromUrl] Failed to parse URL hostname:', error instanceof Error ? error.message : String(error));
           domain = undefined;
         }
         navigation.replace('WebViewExtract', { url: trimmed, domain });

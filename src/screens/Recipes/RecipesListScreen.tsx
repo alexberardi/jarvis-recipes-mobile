@@ -29,7 +29,8 @@ const RecipesListScreen = ({ navigation }: Props) => {
       const unseen = res.jobs?.filter((j) => !seen[j.id]).length ?? 0;
       setJobsCount(total);
       setUnseenCount(unseen);
-    } catch {
+    } catch (error) {
+      console.warn('[RecipesList] Failed to load mailbox count:', error instanceof Error ? error.message : String(error));
       setJobsCount(0);
       setUnseenCount(0);
     }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { Button, Text } from 'react-native';
 
 import { useSeenJobs } from '../src/hooks/useSeenJobs';
 
@@ -22,8 +23,6 @@ const SeenJobsConsumer = () => {
     </>
   );
 };
-
-import { Button, Text } from 'react-native';
 
 describe('useSeenJobs', () => {
   it('marks ids as seen and persists', async () => {
