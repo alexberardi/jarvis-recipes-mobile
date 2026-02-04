@@ -183,8 +183,8 @@ const WebViewExtractScreen = ({ navigation, route }: Props) => {
         const htmlSnippet = data.html || null;
         handleExtraction(jsonldBlocks, htmlSnippet);
       }
-    } catch {
-      // ignore invalid messages
+    } catch (error) {
+      console.warn('[WebViewExtract] Failed to parse WebView message:', error instanceof Error ? error.message : String(error));
     }
   };
 

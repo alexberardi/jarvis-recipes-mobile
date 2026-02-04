@@ -43,7 +43,8 @@ export const submitImageIngestionJob = async (
         name: img.name || `image-${index + 1}.jpg`,
         type: 'image/jpeg',
       });
-    } catch {
+    } catch (error) {
+      console.warn('[recipeIngestion] Image manipulation failed, using original:', error instanceof Error ? error.message : String(error));
       processed.push({
         uri: img.uri,
         name: img.name || `image-${index + 1}.jpg`,

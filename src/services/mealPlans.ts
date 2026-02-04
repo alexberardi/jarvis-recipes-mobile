@@ -31,8 +31,8 @@ export const saveMealPlanJob = async (jobId: string, requestId?: string) => {
       MEALPLAN_JOB_KEY,
       JSON.stringify({ jobId, requestId, startedAt: Date.now() }),
     );
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn('[mealPlans] Failed to save meal plan job:', error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -40,7 +40,8 @@ export const loadMealPlanJob = async (): Promise<{ jobId: string; requestId?: st
   try {
     const raw = await AsyncStorage.getItem(MEALPLAN_JOB_KEY);
     return raw ? (JSON.parse(raw) as { jobId: string; requestId?: string }) : null;
-  } catch {
+  } catch (error) {
+    console.warn('[mealPlans] Failed to load meal plan job:', error instanceof Error ? error.message : String(error));
     return null;
   }
 };
@@ -48,8 +49,8 @@ export const loadMealPlanJob = async (): Promise<{ jobId: string; requestId?: st
 export const clearMealPlanJob = async () => {
   try {
     await AsyncStorage.removeItem(MEALPLAN_JOB_KEY);
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn('[mealPlans] Failed to clear meal plan job:', error instanceof Error ? error.message : String(error));
   }
 };
 

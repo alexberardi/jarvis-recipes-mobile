@@ -12,7 +12,8 @@ export const useSeenJobs = () => {
       try {
         const raw = await AsyncStorage.getItem(SEEN_KEY);
         setSeen(raw ? JSON.parse(raw) : {});
-      } catch {
+      } catch (error) {
+        console.warn('[useSeenJobs] Failed to load seen jobs:', error instanceof Error ? error.message : String(error));
         setSeen({});
       } finally {
         setReady(true);
@@ -25,8 +26,8 @@ export const useSeenJobs = () => {
     setSeen(next);
     try {
       await AsyncStorage.setItem(SEEN_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
+    } catch (error) {
+      console.warn('[useSeenJobs] Failed to persist seen jobs:', error instanceof Error ? error.message : String(error));
     }
   };
 

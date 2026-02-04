@@ -14,8 +14,8 @@ const JOB_STATE_KEY = '@jarvis_recipes/active_job';
 export const saveActiveJob = async (job: PersistedJob) => {
   try {
     await AsyncStorage.setItem(JOB_STATE_KEY, JSON.stringify(job));
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn('[jobPolling] Failed to save active job:', error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -23,7 +23,8 @@ export const loadActiveJob = async (): Promise<PersistedJob | null> => {
   try {
     const raw = await AsyncStorage.getItem(JOB_STATE_KEY);
     return raw ? (JSON.parse(raw) as PersistedJob) : null;
-  } catch {
+  } catch (error) {
+    console.warn('[jobPolling] Failed to load active job:', error instanceof Error ? error.message : String(error));
     return null;
   }
 };
@@ -31,8 +32,8 @@ export const loadActiveJob = async (): Promise<PersistedJob | null> => {
 export const clearActiveJob = async () => {
   try {
     await AsyncStorage.removeItem(JOB_STATE_KEY);
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn('[jobPolling] Failed to clear active job:', error instanceof Error ? error.message : String(error));
   }
 };
 
