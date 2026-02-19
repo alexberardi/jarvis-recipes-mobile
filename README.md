@@ -26,8 +26,8 @@ npm run dev:ios
 Create a `.env` file in the project root:
 
 ```bash
-EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:8007
-EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:8001
+EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:7701
+EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:7030
 ```
 
 ## Tech
