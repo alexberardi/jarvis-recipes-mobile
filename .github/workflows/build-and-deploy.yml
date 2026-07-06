@@ -25,6 +25,9 @@ on:
           - jarvis-mobile-staging
           - jarvis-mobile-prod
 
+permissions:
+  contents: read
+
 jobs:
   build-and-deploy:
     name: Build and Deploy iOS App
@@ -48,7 +51,7 @@ jobs:
           cache: npm
 
       - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
+        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
