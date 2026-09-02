@@ -1,3 +1,4 @@
+import { NavigationContainer } from '@react-navigation/native';
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -5,6 +6,17 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import RecipesListScreen from '../src/screens/Recipes/RecipesListScreen';
+
+// The screen polls the import mailbox on focus and resumes a stored job on
+// mount; neither should reach the network from a render test.
+jest.mock('../src/services/parseRecipe', () => ({
+  getParseJobs: jest.fn().mockResolvedValue({ jobs: [] }),
+}));
+
+jest.mock('../src/services/jobPolling', () => ({
+  loadActiveJob: jest.fn().mockResolvedValue(null),
+  clearActiveJob: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('../src/hooks/useRecipes', () => {
   const sampleRecipes = [
@@ -49,11 +61,15 @@ describe('RecipesListScreen', () => {
       insets: { top: 0, left: 0, right: 0, bottom: 0 },
     };
 
+    // useFocusEffect needs a real navigation context, not just the navigation
+    // prop, so the screen has to render inside a NavigationContainer.
     render(
       <SafeAreaProvider initialMetrics={initialMetrics}>
         <PaperProvider>
           <QueryClientProvider client={queryClient}>
-            <RecipesListScreen navigation={navigation} route={{} as any} />
+            <NavigationContainer>
+              <RecipesListScreen navigation={navigation} route={{} as any} />
+            </NavigationContainer>
           </QueryClientProvider>
         </PaperProvider>
       </SafeAreaProvider>,

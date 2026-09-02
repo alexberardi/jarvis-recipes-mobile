@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "dev:ios": "open -a Simulator && npx expo run:ios --device \"iPhone 15\"",
     "dev-full:ios": "open -a Simulator && npx expo prebuild --clean && npx expo run:ios --device \"iPhone 15\""
   },
@@ -22,6 +24,7 @@
     "expo-crypto": "~15.0.9",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.11",
+    "expo-secure-store": "~15.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
@@ -45,15 +48,5 @@
     "react-native-worklets": "0.5.1",
     "typescript": "~5.9.2"
   },
-  "private": true,
-  "jest": {
-    "preset": "jest-expo",
-    "setupFilesAfterEnv": [
-      "@testing-library/jest-native/extend-expect",
-      "<rootDir>/jest.setup.js"
-    ],
-    "transformIgnorePatterns": [
-      "node_modules/(?!(jest-)?react-native|@react-native|@react-navigation|@react-native-community|expo(nent)?|@expo(nent)?|@expo-google-fonts|@unimodules|unimodules|sentry-expo|native-base)"
-    ]
-  }
+  "private": true
 }

@@ -1,3 +1,14 @@
+/**
+ * Auth session state.
+ *
+ * The access/refresh pair is a jarvis-auth credential valid against the whole
+ * stack, so it is persisted to the OS keychain (services/tokenStorage), never
+ * to AsyncStorage. Only the non-secret user blob stays in AsyncStorage.
+ *
+ * Token refresh itself lives in api/recipesApi (`refreshAuthToken`) so the 401
+ * retry path and the periodic timer below share one single-flight request — the
+ * refresh token rotates on every use and must not be double-spent.
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
   createContext,
@@ -5,11 +16,14 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import authApi from '../api/authApi';
-import { setAuthHandlers } from '../api/recipesApi';
+import { refreshAuthToken, setAuthHandlers } from '../api/recipesApi';
+import { USER_KEY } from '../config/storageKeys';
+import { clearTokens, getTokens, setTokens } from '../services/tokenStorage';
 
 export interface AuthUser {
   id: number;
@@ -31,10 +45,6 @@ type AuthResponse = {
   token_type: 'bearer';
   user: AuthUser;
 };
-
-const ACCESS_TOKEN_KEY = '@jarvis_recipes/access_token';
-const REFRESH_TOKEN_KEY = '@jarvis_recipes/refresh_token';
-const USER_KEY = '@jarvis_recipes/user';
 
 const initialState: AuthState = {
   user: null,
@@ -69,24 +79,47 @@ const parseUser = (value: string | null): AuthUser | null => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>(initialState);
+  // Synchronous mirror of `state`. The refresh in recipesApi is module-level and
+  // can read the token pair in the window between a setState and its re-render,
+  // so the getters handed to it must not go through React's async state — a
+  // stale read there would replay an already-rotated refresh token.
+  const stateRef = useRef<AuthState>(initialState);
+
+  const applyState = useCallback((next: AuthState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
 
   const persistAuth = useCallback(
     async (payload: { accessToken: string; refreshToken: string; user: AuthUser }) => {
       const { accessToken, refreshToken, user } = payload;
-      setState((prev) => ({
-        ...prev,
+      applyState({
         user,
         accessToken,
         refreshToken,
         isAuthenticated: true,
-      }));
-      await AsyncStorage.multiSet([
-        [ACCESS_TOKEN_KEY, accessToken],
-        [REFRESH_TOKEN_KEY, refreshToken],
-        [USER_KEY, JSON.stringify(user)],
+        isLoading: false,
+      });
+      await Promise.all([
+        setTokens(accessToken, refreshToken),
+        AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
       ]);
     },
-    [],
+    [applyState],
+  );
+
+  /** Commit a rotated token pair (called by the shared refresh in recipesApi). */
+  const persistTokens = useCallback(
+    async (accessToken: string, refreshToken: string) => {
+      applyState({
+        ...stateRef.current,
+        accessToken,
+        refreshToken,
+        isAuthenticated: true,
+      });
+      await setTokens(accessToken, refreshToken);
+    },
+    [applyState],
   );
 
   const login = useCallback(
@@ -118,52 +151,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const logout = useCallback(async () => {
-    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
-    setState({
+    // Drop the session in memory first so nothing can keep using the token if
+    // the storage wipe below fails.
+    applyState({
       ...initialState,
       isLoading: false,
     });
-  }, []);
+    await Promise.all([clearTokens(), AsyncStorage.removeItem(USER_KEY)]);
+  }, [applyState]);
 
-  const refreshAccessToken = useCallback(async () => {
-    const refreshToken = state.refreshToken;
-    if (!refreshToken) return null;
-    try {
-      const res = await authApi.post<Omit<AuthResponse, 'user'>>('/auth/refresh', {
-        refresh_token: refreshToken,
-      });
-      const newAccess = res.data.access_token;
-      const newRefresh = res.data.refresh_token ?? refreshToken;
-      setState((prev) => ({
-        ...prev,
-        accessToken: newAccess,
-        refreshToken: newRefresh,
-        isAuthenticated: true,
-      }));
-      await AsyncStorage.multiSet([
-        [ACCESS_TOKEN_KEY, newAccess],
-        [REFRESH_TOKEN_KEY, newRefresh],
-      ]);
-      return newAccess;
-    } catch (error) {
-      console.warn('[AuthContext] Token refresh failed:', error instanceof Error ? error.message : String(error));
-      return null;
-    }
-  }, [state.refreshToken]);
+  /**
+   * Refresh via the shared single-flight in recipesApi, so a manual refresh,
+   * the periodic timer and a 401 retry can never spend the same rotating
+   * refresh token twice.
+   */
+  const refreshAccessToken = useCallback(() => refreshAuthToken(), []);
 
   const bootstrapAuth = useCallback(async () => {
     try {
-      const [storedAccess, storedRefresh, storedUser] = await AsyncStorage.multiGet([
-        ACCESS_TOKEN_KEY,
-        REFRESH_TOKEN_KEY,
-        USER_KEY,
+      const [{ accessToken, refreshToken }, storedUser] = await Promise.all([
+        // Migrates any pre-keychain tokens out of AsyncStorage on first run.
+        getTokens(),
+        AsyncStorage.getItem(USER_KEY),
       ]);
-      const accessToken = storedAccess[1];
-      const refreshToken = storedRefresh[1];
-      const user = parseUser(storedUser[1]);
+      const user = parseUser(storedUser);
 
       if (accessToken && refreshToken && user) {
-        setState({
+        applyState({
           user,
           accessToken,
           refreshToken,
@@ -171,37 +185,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isLoading: false,
         });
       } else {
-        setState({
+        applyState({
           ...initialState,
           isLoading: false,
         });
       }
     } catch (error) {
       console.warn('[AuthContext] Bootstrap auth failed:', error instanceof Error ? error.message : String(error));
-      setState({
+      applyState({
         ...initialState,
         isLoading: false,
       });
     }
-  }, []);
+  }, [applyState]);
+
+  // Wire the API client to this session before anything can issue a request.
+  useEffect(() => {
+    setAuthHandlers({
+      getAccessTokenHandler: () => stateRef.current.accessToken,
+      getRefreshTokenHandler: () => stateRef.current.refreshToken,
+      updateTokensHandler: persistTokens,
+      logoutHandler: logout,
+    });
+  }, [logout, persistTokens]);
 
   useEffect(() => {
     bootstrapAuth();
   }, [bootstrapAuth]);
 
   useEffect(() => {
-    setAuthHandlers({
-      getAccessTokenHandler: () => state.accessToken,
-      refreshAccessTokenHandler: refreshAccessToken,
-      logoutHandler: logout,
-    });
-  }, [state.accessToken, refreshAccessToken, logout]);
-
-  useEffect(() => {
     if (!state.isAuthenticated) return;
     const timer = setInterval(() => {
       refreshAccessToken().catch(() => {
-        // best-effort; if refresh fails, next guarded request will trigger logout
+        // best-effort; a dead session is force-logged-out by the refresh itself
       });
     }, REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
@@ -229,4 +245,3 @@ export const useAuth = () => {
   }
   return ctx;
 };
-
