@@ -7,6 +7,9 @@ const authApi = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Bounded so an unreachable auth service can't hang login forever, or park
+  // the single-flight refresh promise in recipesApi indefinitely.
+  timeout: 10000,
 });
 
 export default authApi;

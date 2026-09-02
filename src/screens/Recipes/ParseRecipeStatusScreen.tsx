@@ -53,7 +53,9 @@ const ParseRecipeStatusScreen = ({ route, navigation }: Props) => {
   const [status, setStatus] = useState<ClientState>('QUEUED');
   const [message, setMessage] = useState<string>('Your recipe is in the queue...');
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<NodeJS.Timer | null>(null);
+  // `NodeJS.Timer` is not what React Native's setInterval returns, so the handle
+  // is inferred from the platform's own setInterval rather than named outright.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     pollRef.current = setInterval(async () => {

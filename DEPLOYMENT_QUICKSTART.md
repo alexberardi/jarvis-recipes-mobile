@@ -84,16 +84,17 @@ eas build:view [BUILD_ID]
 
 ## Automated via GitHub Actions
 
-- Push to `staging` → Builds preview
-- Push to `main` → Builds production + submits to TestFlight
+- PR into `main` → Type check + Jest only (no build)
+- Push to `main` → Builds preview + submits to TestFlight
+- Push of a `v*` tag → Builds production + submits to TestFlight
 - Manual trigger → Actions tab → "Run workflow"
 
 ## Typical Workflow
 
 1. **Develop locally** with `npm start`
-2. **Merge to staging** → Auto-builds preview for QA
-3. **Test preview build** with staging APIs
-4. **Merge to main** → Auto-builds and submits to TestFlight
+2. **Open a PR into main** → type check + Jest run as required gates
+3. **Merge to main** → Auto-builds preview and submits to TestFlight
+4. **Tag `vX.Y.Z` and push** → Auto-builds production and submits to TestFlight
 5. **TestFlight testing** with internal/external testers
 6. **Submit to App Store** when ready (manual in App Store Connect)
 
@@ -102,8 +103,8 @@ eas build:view [BUILD_ID]
 ### Development (.env)
 
 ```bash
-EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:8007
-EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:8001
+EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:7701
+EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:7030
 ```
 
 ### Staging (eas.json - preview profile)

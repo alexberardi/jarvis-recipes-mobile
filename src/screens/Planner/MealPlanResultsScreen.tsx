@@ -23,6 +23,13 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
 
   useEffect(() => {
     const load = async () => {
+      // `MealPlanResults` is reachable with no params at all, so there is no job
+      // to poll — say so instead of requesting /jobs/undefined.
+      if (!jobId) {
+        setError('No meal plan to show. Generate a plan first.');
+        setLoading(false);
+        return;
+      }
       try {
         const res = await getMealPlanJob(jobId);
         const normalizedResult = (res as any)?.result?.result ?? res.result;

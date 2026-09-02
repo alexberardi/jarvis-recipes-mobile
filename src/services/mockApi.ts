@@ -1,8 +1,14 @@
+/**
+ * Bundled demo data for the legacy WeeklyPlan screen. Nothing here talks to
+ * jarvis-recipes-server — see services/recipes.ts and services/mealPlans.ts for
+ * the real clients.
+ */
+import { ImageSourcePropType } from 'react-native';
+
 import recipesData from '../mocks/recipes.json';
 import mealPlansData from '../mocks/mealPlans.json';
-import { Recipe, RecipeDTO } from '../types/Recipe';
 import { WeeklyPlan } from '../types/MealPlan';
-import { ImageSourcePropType } from 'react-native';
+import { MockRecipe, RecipeDTO } from '../types/Recipe';
 
 type MealPlanDTO = typeof mealPlansData;
 
@@ -14,15 +20,15 @@ const recipeImages: Record<string, ImageSourcePropType> = {
   placeholder: require('../../assets/recipes/placeholder.png'),
 };
 
-const mapRecipe = (recipe: RecipeDTO): Recipe => ({
+const mapRecipe = (recipe: RecipeDTO): MockRecipe => ({
   ...recipe,
   image: recipeImages[recipe.imageKey] ?? recipeImages.placeholder,
 });
 
-export const getRecipes = async (): Promise<Recipe[]> =>
+export const getRecipes = async (): Promise<MockRecipe[]> =>
   Promise.resolve(recipesData.map(mapRecipe));
 
-export const getRecipeById = async (id: string): Promise<Recipe | undefined> => {
+export const getRecipeById = async (id: string): Promise<MockRecipe | undefined> => {
   const recipe = recipesData.find((item) => item.id === id);
   return Promise.resolve(recipe ? mapRecipe(recipe) : undefined);
 };
