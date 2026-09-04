@@ -106,9 +106,12 @@ eas submit --platform ios --latest
 
 #### Automated Deployment
 
-GitHub Actions automatically:
-- Builds **preview** on push to `staging` branch
-- Builds **production** and submits to TestFlight on push to `main` branch
+GitHub Actions runs a type check (`npx tsc --noEmit`) and the Jest suite on every
+pull request into `main`, and only then:
+- Builds **preview** and submits to TestFlight on push to `main`
+- Builds **production** and submits to TestFlight on push of a `v*` tag
+
+There is no `staging` branch.
 
 See [.github/workflows/build-and-deploy.yml](.github/workflows/build-and-deploy.yml) for details.
 

@@ -49,15 +49,20 @@ const WeeklyPlanScreen = ({ navigation }: Props) => {
                   key={meal.id}
                   title={`${meal.mealType}: ${meal.recipe?.title ?? 'TBD'}`}
                   description={
-                    meal.recipe?.tags
-                      ? meal.recipe.tags.map((t) => t.name).join(', ')
+                    meal.recipe?.tags?.length
+                      ? meal.recipe.tags.join(', ')
                       : 'Recipe details coming soon'
                   }
                   left={(props) => <List.Icon {...props} icon="calendar" />}
                   onPress={() => {
+                    // RecipeDetail lives in the Recipes tab's stack, not this
+                    // one, so the jump goes through the parent tab navigator.
                     const numericId = Number(meal.recipeId);
                     if (Number.isFinite(numericId)) {
-                      navigation.navigate('RecipeDetail', { id: numericId });
+                      navigation.getParent()?.navigate('RecipesTab', {
+                        screen: 'RecipeDetail',
+                        params: { id: numericId },
+                      });
                     }
                   }}
                 />

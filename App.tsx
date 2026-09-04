@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from './src/auth/AuthContext';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import { AUTH_API_BASE_URL, RECIPES_API_BASE_URL } from './src/config/env';
 import RootNavigator from './src/navigation/RootNavigator';
 import { ThemeProvider, useThemePreference } from './src/theme/ThemeProvider';
@@ -47,9 +48,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <AppContent />
-        </ThemeProvider>
+        {/* Outside ThemeProvider so a failure in the theme/Paper layer still
+            renders the fallback instead of a white screen. */}
+        <ErrorBoundary>
+          <ThemeProvider>
+            <AppContent />
+          </ThemeProvider>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

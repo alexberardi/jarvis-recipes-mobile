@@ -9,6 +9,9 @@ export default {
     icon: './assets/logo-dark.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // expo-secure-store backs the JWT keychain storage (services/tokenStorage).
+    // No faceIDPermission: this app never gates an item behind biometrics.
+    plugins: ['expo-secure-store'],
     splash: {
       image: './assets/logo-dark.png',
       resizeMode: 'contain',

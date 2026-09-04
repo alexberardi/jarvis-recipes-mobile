@@ -149,8 +149,14 @@ eas submit --platform ios --profile production --latest
 
 The GitHub Action runs automatically on:
 
-- **Push to `main` branch**: Builds and submits production build to TestFlight
-- **Push to `staging` branch**: Builds preview build (internal testing)
+- **Pull request into `main`**: Type check + Jest only. No build, no submit.
+- **Push to `main` branch**: Builds the **preview** profile and submits to
+  TestFlight, using the `jarvis-mobile-staging` GitHub Environment.
+- **Push of a `v*` tag**: Builds the **production** profile and submits to
+  TestFlight, using the `jarvis-mobile-prod` GitHub Environment.
+
+There is no `staging` branch. The build job will not start unless the type check
+and test jobs both pass.
 
 ### Manual Trigger
 
@@ -193,8 +199,8 @@ You can also trigger builds manually:
 Create a `.env` file:
 
 ```bash
-EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:8007
-EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:8001
+EXPO_PUBLIC_AUTH_API_BASE_URL=http://localhost:7701
+EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:7030
 ```
 
 ### EAS Builds
@@ -206,8 +212,9 @@ Environment variables are defined in `eas.json` per profile. These can be overri
 ### Typical Release Process
 
 1. **Development**: Work on feature branches, test locally
-2. **Staging**: Merge to `staging` → Auto-builds preview → Test with staging API
-3. **Production**: Merge to `main` → Auto-builds and submits to TestFlight
+2. **Review**: Open a PR into `main` → type check + Jest run as required gates
+3. **Staging**: Merge to `main` → Auto-builds the preview profile → Test via TestFlight
+4. **Production**: Tag `vX.Y.Z` and push it → Auto-builds production and submits
 4. **TestFlight**: Distribute to internal/external testers
 5. **App Store**: When ready, submit from App Store Connect
 
