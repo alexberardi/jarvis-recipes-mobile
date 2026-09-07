@@ -99,7 +99,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 20.x
+          # 22, not 20: eas-cli pulls @oclif/plugin-autocomplete, which now
+          # requires >=22 and fails the install outright. This job is the only
+          # one that installs eas-cli; lint and test stay on 20, which is what
+          # the Expo SDK toolchain is built against.
+          node-version: 22.x
           cache: npm
 
       - name: Setup Expo and EAS
