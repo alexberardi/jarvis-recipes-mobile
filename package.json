@@ -8,6 +8,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "test:flows": "jest __tests__/flows",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "dev:ios": "open -a Simulator && npx expo run:ios --device \"iPhone 15\"",

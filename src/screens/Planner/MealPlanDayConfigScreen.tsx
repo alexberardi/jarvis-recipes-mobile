@@ -1,7 +1,18 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState, useEffect } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Appbar, Button, Checkbox, HelperText, IconButton, Text, TextInput, Chip, useTheme } from 'react-native-paper';
+import {
+  Appbar,
+  Button,
+  Checkbox,
+  Chip,
+  Divider,
+  HelperText,
+  IconButton,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
 
 import { PlannerStackParamList } from '../../navigation/types';
 import { MealType, MealPlanGenerateRequest, MealSlotRequest } from '../../types/MealPlan';
@@ -96,6 +107,56 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
         },
       },
     }));
+  };
+
+  /**
+   * Turn this meal on for every day in the plan and give it these servings.
+   *
+   * "Dinner is for four" is a household fact, not a per-day decision, so typing
+   * it seven times is the kind of busywork this screen exists to remove. Scoped
+   * to the same meal type: lunch for one and dinner for four is normal.
+   *
+   * It ENABLES the meal wherever it is off. An earlier version only wrote to
+   * slots already switched on, on the reasoning that turning a meal on as a side
+   * effect would be a surprise -- but that made the button do nothing on a fresh
+   * plan, where every day but the first is off, which is exactly when someone
+   * reaches for it. Applying dinner-for-four to the week means wanting dinner on
+   * the week. The confirmation says so, and each day can still be switched back
+   * off individually.
+   */
+  const applyServingsToAllDays = (meal: MealType, servings: string) => {
+    setDays((prev) => {
+      const next = { ...prev };
+      for (const date of dates) {
+        const cfg = next[date]?.[meal] ?? defaultMealConfig();
+        next[date] = { ...next[date], [meal]: { ...cfg, enabled: true, servings } };
+      }
+      return next;
+    });
+    // Those slots were the reason for any outstanding servings errors.
+    setFieldErrors((prev) => {
+      const cleaned = { ...prev };
+      for (const date of dates) delete cleaned[`${date}-${meal}-servings`];
+      return cleaned;
+    });
+  };
+
+  /** Copy one day's entire configuration onto every other day in the plan. */
+  const applyDayToAllDays = (from: string) => {
+    setDays((prev) => {
+      const source = prev[from];
+      if (!source) return prev;
+      const next = { ...prev };
+      for (const date of dates) {
+        if (date === from) continue;
+        // Structured clone per day: sharing the object would make later edits to
+        // one day silently change the others.
+        next[date] = JSON.parse(JSON.stringify(source));
+      }
+      return next;
+    });
+    setFieldErrors({});
+    setCopyModal({ visible: false });
   };
 
   const updateMealField = (date: string, meal: MealType, field: keyof MealConfig, value: string) => {
@@ -203,7 +264,11 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
   };
 
   const formattedDate = (date: string) => {
-    const d = new Date(date);
+    // `new Date("2026-09-07")` parses as UTC midnight, which in any timezone
+    // behind UTC renders as the PREVIOUS day -- 2026-09-07 showed as
+    // "Sunday - 9/6/2026" while the validation message underneath said
+    // 2026-09-07. Appending a time forces local parsing.
+    const d = new Date(`${date}T00:00:00`);
     return `${d.toLocaleDateString(undefined, { weekday: 'long' })} - ${d.toLocaleDateString()}`;
   };
 
@@ -228,7 +293,10 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
   };
 
   const tagChips = useMemo(
-    () => (tagOptions ?? []).map((t) => t.name.toLowerCase()),
+    // Deduped: tags are unique per exact name server-side, so "dinner" and
+    // "Dinner" can both exist and collapse to the same string once lowercased.
+    // That produced two suggestion chips with the same React key.
+    () => Array.from(new Set((tagOptions ?? []).map((t) => t.name.toLowerCase()))),
     [tagOptions],
   );
   const renderTagInput = (date: string, meal: MealType, cfg: MealConfig) => {
@@ -314,23 +382,28 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
       </Appbar.Header>
       <ScrollView contentContainerStyle={styles.container}>
         {dates.map((date) => (
-          <View key={date} style={styles.dayCard}>
+          <View
+            key={date}
+            style={[styles.dayCard, { backgroundColor: theme.colors.surfaceVariant }]}
+          >
             <View style={styles.dayHeader}>
               <Text variant="titleMedium">{formattedDate(date)}</Text>
+              {/* Not disabled when there is nothing to copy: the modal already
+                  says "No other days to copy from.", and a greyed-out icon with
+                  no explanation reads as broken. Let it open and explain. */}
               <IconButton
                 icon="dots-vertical"
                 onPress={() => setCopyModal({ visible: true, target: date })}
-                disabled={
-                  dates.length <= 1 ||
-                  dates.filter((d) => d !== date && Object.keys(days[d] || {}).some((m) => (days[d] as any)?.[m]?.enabled)).length ===
-                    0
-                }
+                accessibilityLabel={`Copy settings into ${date}`}
               />
             </View>
             {mealOrder.map((meal) => {
               const cfg = days[date]?.[meal];
               return (
-                <View key={`${date}-${meal}`} style={styles.mealRow}>
+                <View
+                  key={`${date}-${meal}`}
+                  style={[styles.mealRow, { borderColor: theme.colors.outlineVariant }]}
+                >
                   <View style={styles.mealHeaderRow}>
                     <Checkbox.Item
                       label={meal}
@@ -356,14 +429,7 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
                           icon="content-copy"
                           size={18}
                           onPress={() => setMealCopyModal({ visible: true, targetDate: date, targetMeal: meal })}
-                          disabled={
-                            dates.filter(
-                              (d) =>
-                                d !== date &&
-                                days[d]?.[meal]?.enabled &&
-                                (days[d]?.[meal]?.servings || days[d]?.[meal]?.tags || days[d]?.[meal]?.note),
-                            ).length === 0
-                          }
+                          accessibilityLabel={`Copy ${meal} settings into ${date}`}
                         />
                       </>
                     ) : null}
@@ -401,6 +467,35 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
                         onBlur={() => validateServings(date, meal, cfg.servings)}
                         keyboardType="numeric"
                         error={!!fieldErrors[`${date}-${meal}-servings`]}
+                        // Shown whenever there is a number and more than one day.
+                        // An earlier version also required another day to have
+                        // this meal already enabled, which hid the button at
+                        // precisely the moment it is wanted -- you typically set
+                        // servings on the first day before enabling the rest.
+                        right={
+                          cfg.servings.trim() && dates.length > 1 ? (
+                            <TextInput.Icon
+                              icon="content-duplicate"
+                              // Confirmed: it switches the meal on everywhere and
+                              // overwrites servings the person may already have
+                              // set on other days, and there is no undo here.
+                              onPress={() =>
+                                Alert.alert(
+                                  `Apply to every ${meal}?`,
+                                  `Turn ${meal} on for every day in this plan and set it to ${cfg.servings} servings. This replaces servings already entered for other days.`,
+                                  [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                      text: 'Apply',
+                                      onPress: () => applyServingsToAllDays(meal, cfg.servings),
+                                    },
+                                  ],
+                                )
+                              }
+                              accessibilityLabel={`Apply ${cfg.servings} servings to every ${meal}`}
+                            />
+                          ) : undefined
+                        }
                       />
                       {fieldErrors[`${date}-${meal}-servings`] ? (
                         <HelperText type="error" visible>
@@ -445,7 +540,26 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
           activeOpacity={1}
           onPress={() => setCopyModal({ visible: false })}
         >
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.elevation.level3 }]}>
+            {/* Two directions, because both are natural and each is awkward via
+                the other: pull a day's setup in, or push this day's out to the
+                whole week. "Apply to all" is the one people reach for after
+                configuring the first day. */}
+            <Text variant="titleMedium">Apply this day to all days</Text>
+            {dates.length > 1 && copyModal.target ? (
+              <Button
+                mode="contained-tonal"
+                icon="calendar-multiselect"
+                onPress={() => applyDayToAllDays(copyModal.target!)}
+              >
+                Apply to all {dates.length - 1} other days
+              </Button>
+            ) : (
+              <Text>No other days in this plan.</Text>
+            )}
+
+            <Divider style={styles.modalDivider} />
+
             <Text variant="titleMedium">Copy from</Text>
             {dates
               .filter(
@@ -485,7 +599,7 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
           activeOpacity={1}
           onPress={() => setMealCopyModal({ visible: false })}
         >
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.elevation.level3 }]}>
             <Text variant="titleMedium">Copy meal from</Text>
             {mealCopyModal.visible &&
               dates
@@ -531,6 +645,7 @@ const MealPlanDayConfigScreen = ({ navigation, route }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  modalDivider: { marginVertical: 12 },
   container: {
     padding: 16,
     gap: 12,
@@ -538,7 +653,6 @@ const styles = StyleSheet.create({
   dayCard: {
     padding: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.02)',
     gap: 8,
   },
   dayHeader: {
@@ -548,7 +662,6 @@ const styles = StyleSheet.create({
   },
   mealRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   mealDetails: {
     gap: 8,
@@ -597,8 +710,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
+  // No background colour here: it comes from the theme at the call site. It was
+  // #1c1c1e, which put the light theme's near-black text on a near-black card.
   modalCard: {
-    backgroundColor: '#1c1c1e',
     padding: 16,
     borderRadius: 12,
     width: '90%',

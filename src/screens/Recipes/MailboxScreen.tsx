@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Appbar, Badge, Button, HelperText, List, Text } from 'react-native-paper';
+import { Appbar, Badge, Button, HelperText, IconButton, List, Text } from 'react-native-paper';
 import { Swipeable } from 'react-native-gesture-handler';
 
 import LoadingIndicator from '../../components/LoadingIndicator';
@@ -88,6 +88,26 @@ const MailboxScreen = ({ navigation }: Props) => {
     }, [fetchJobs]),
   );
 
+  const removeJob = useCallback(
+    async (job: ParseJobPreview) => {
+      try {
+        await cancelJob(job.id);
+        // Optimistic: drop it now, then reconcile with the server.
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+        await fetchJobs();
+      } catch (err: any) {
+        const message =
+          err?.response?.data?.detail || err?.message || 'Unable to remove that import.';
+        // Reconcile FIRST, then report. `fetchJobs` opens with setError(null), so
+        // setting the message before it ran wiped the only explanation the person
+        // was going to get for a row that refused to go away.
+        await fetchJobs();
+        setError(message);
+      }
+    },
+    [fetchJobs],
+  );
+
   const handleOpenJob = async (job: ParseJobPreview) => {
     await markSeen([job.id]);
     try {
@@ -97,7 +117,23 @@ const MailboxScreen = ({ navigation }: Props) => {
         !full.result?.success ||
         !full.result.recipe
       ) {
-        setError('This imported recipe is no longer available.');
+        // The job is listed (the list only returns COMPLETE, unexpired jobs) but
+        // its staged result is gone -- run_cleanup prunes stage_recipes without
+        // touching the job row, so the entry outlives what it points at. There is
+        // nothing to open, so the only useful action is removing it. Offer that
+        // here rather than leaving a row that fails every time it is tapped.
+        Alert.alert(
+          'Import no longer available',
+          'The parsed recipe for this import has expired. Remove it from the mailbox?',
+          [
+            { text: 'Keep', style: 'cancel' },
+            {
+              text: 'Remove',
+              style: 'destructive',
+              onPress: () => removeJob(job),
+            },
+          ],
+        );
         return;
       }
       const params = mapParsedRecipeToParams(full.result.recipe, job.id, full.result.warnings);
@@ -112,25 +148,9 @@ const MailboxScreen = ({ navigation }: Props) => {
   };
 
   const handleCancel = (job: ParseJobPreview) => {
-    Alert.alert('Cancel import?', 'This will cancel the recipe import job.', [
+    Alert.alert('Remove import?', 'This removes the import from your mailbox.', [
       { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Cancel',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await cancelJob(job.id);
-            // Optimistically remove from list for better UX
-            setJobs((prev) => prev.filter((j) => j.id !== job.id));
-            // Re-fetch to ensure consistency with server
-            await fetchJobs();
-          } catch (err: any) {
-            setError(err?.response?.data?.detail || err?.message || 'Unable to cancel job.');
-            // Re-fetch on error to ensure list is up to date
-            await fetchJobs();
-          }
-        },
-      },
+      { text: 'Remove', style: 'destructive', onPress: () => removeJob(job) },
     ]);
   };
 
@@ -155,7 +175,20 @@ const MailboxScreen = ({ navigation }: Props) => {
           title={formatTitle(item)}
           description={`${item.preview?.source_host ?? ''} ${relativeTime(item.completed_at)}`}
           onPress={() => handleOpenJob(item)}
-          right={() => (unseen ? <Badge style={styles.dot}> </Badge> : null)}
+          // Swipe-to-remove still works, but a hidden gesture was the only way to
+          // clear a row -- and an expired import can never be opened, so its
+          // delete affordance on CreateRecipe is unreachable. Show the action.
+          right={() => (
+            <View style={styles.rowActions}>
+              {unseen ? <Badge style={styles.dot}> </Badge> : null}
+              <IconButton
+                icon="delete-outline"
+                size={20}
+                onPress={() => handleCancel(item)}
+                accessibilityLabel={`Remove ${formatTitle(item)}`}
+              />
+            </View>
+          )}
           titleStyle={unseen ? styles.unseenTitle : undefined}
         />
       </Swipeable>
@@ -170,15 +203,22 @@ const MailboxScreen = ({ navigation }: Props) => {
         <Appbar.Action icon="check" onPress={handleMarkAll} accessibilityLabel="Mark all as seen" />
       </Appbar.Header>
       <View style={styles.container}>
-        {loading ? (
-          <LoadingIndicator />
-        ) : error ? (
-          <>
+        {/* The error used to REPLACE the list, which is what made a failed open
+            look like a dead end: tapping an expired import hid every row, so the
+            swipe-to-remove action went with it. Render it above the list instead
+            so the item stays reachable. */}
+        {error ? (
+          <View style={styles.errorBanner}>
             <HelperText type="error" visible>
               {error}
             </HelperText>
-            <Button onPress={fetchJobs}>Retry</Button>
-          </>
+            <Button compact onPress={fetchJobs}>
+              Retry
+            </Button>
+          </View>
+        ) : null}
+        {loading ? (
+          <LoadingIndicator />
         ) : jobs.length === 0 ? (
           <Text>
             No imported recipes are waiting right now. Try adding a recipe from a URL to see it
@@ -206,6 +246,15 @@ const MailboxScreen = ({ navigation }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   container: {
     flex: 1,
     padding: 8,

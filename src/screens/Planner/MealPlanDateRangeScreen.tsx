@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
-import { Appbar, Button, HelperText, IconButton, Text } from 'react-native-paper';
+import { Appbar, Button, HelperText, IconButton, Text, useTheme } from 'react-native-paper';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PlannerStackParamList } from '../../navigation/types';
@@ -9,7 +9,21 @@ type Props = NativeStackScreenProps<PlannerStackParamList, 'MealPlanDateRange'>;
 
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
-const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Local calendar date as YYYY-MM-DD.
+ *
+ * NOT toISOString().slice(0,10): the grid is built from local-midnight Dates, and
+ * toISOString converts to UTC first. East of UTC that lands on the previous day,
+ * so every cell carried a key one day earlier than the number printed on it --
+ * and the dates handed to the next screen were off by one. West of UTC the cells
+ * were fine but `todayKey` was not: after ~20:00 local it read as tomorrow, which
+ * greyed out today.
+ */
+const fmt = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 const buildMonthDays = (month: Date) => {
   const start = startOfMonth(month);
@@ -21,9 +35,11 @@ const buildMonthDays = (month: Date) => {
   return days;
 };
 
-const todayKey = fmt(new Date());
-
 const MealPlanDateRangeScreen = ({ navigation }: Props) => {
+  const theme = useTheme();
+  // Computed per render rather than at module load: the module is evaluated once
+  // per app launch, so a session left open across midnight kept yesterday's key.
+  const todayKey = fmt(new Date());
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -92,20 +108,35 @@ const MealPlanDateRangeScreen = ({ navigation }: Props) => {
                 key={`day-${monthKey}-${idx}-${key}`}
                 style={[
                   styles.cell,
-                  isSelected && styles.cellSelected,
+                  // Colours come from the theme, never from literals. These were
+                  // white-on-translucent-white, written for a dark theme, so in
+                  // light mode the whole month rendered invisible -- every date
+                  // present and tappable, none of them legible.
+                  {
+                    backgroundColor: isSelected
+                      ? theme.colors.primary
+                      : theme.colors.surfaceVariant,
+                  },
                   isPast && styles.cellDisabled,
                 ]}
                 onPress={() => toggle(key)}
                 disabled={isPast}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected, disabled: isPast }}
+                accessibilityLabel={key}
               >
                 <Text
-                  style={
-                    isSelected
-                      ? styles.cellTextSelected
-                      : isPast
-                        ? styles.cellTextDisabled
-                        : styles.cellText
-                  }
+                  style={[
+                    styles.cellText,
+                    isSelected && styles.cellTextSelected,
+                    {
+                      color: isSelected
+                        ? theme.colors.onPrimary
+                        : isPast
+                          ? theme.colors.onSurfaceDisabled
+                          : theme.colors.onSurfaceVariant,
+                    },
+                  ]}
                 >
                   {d.getDate()}
                 </Text>
@@ -158,23 +189,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  cellSelected: {
-    backgroundColor: '#8A00C4',
   },
   cellDisabled: {
-    opacity: 0.3,
+    opacity: 0.4,
   },
   cellText: {
-    color: 'rgba(255,255,255,0.9)',
+    fontVariant: ['tabular-nums'],
   },
   cellTextSelected: {
-    color: '#fff',
     fontWeight: '600',
-  },
-  cellTextDisabled: {
-    color: 'rgba(255,255,255,0.4)',
   },
 });
 

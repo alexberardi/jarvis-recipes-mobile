@@ -8,7 +8,10 @@ import AppLogo from '../../components/AppLogo';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Landing'>;
 
 const LandingScreen = ({ navigation }: Props) => {
-  const logoSize = Math.round(Dimensions.get('window').width * 1.0);
+  // The mark is square now, so full width would be a full-width-TALL block
+  // and push the buttons off screen. 55% leaves room for the title, the
+  // strapline and both actions without scrolling.
+  const logoSize = Math.round(Dimensions.get('window').width * 0.55);
 
   return (
   <View style={styles.container}>

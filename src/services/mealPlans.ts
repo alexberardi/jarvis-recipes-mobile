@@ -56,6 +56,17 @@ export const clearMealPlanJob = async () => {
 
 const recipeCache = new Map<string, Recipe>();
 
+/**
+ * Drop the cache above.
+ *
+ * Process-lifetime by design -- a recipe body does not change while a plan is
+ * being reviewed, and the results screen would otherwise refetch the same recipe
+ * for every slot it appears in. Tests need to clear it between cases, since a
+ * cached title from one case silently answers the next one's assertion without
+ * any request being made.
+ */
+export const resetRecipeCache = () => recipeCache.clear();
+
 export const getRecipeBySource = async (source: string, id: string): Promise<Recipe> => {
   const key = `${source}:${id}`;
   if (recipeCache.has(key)) return recipeCache.get(key)!;
@@ -72,3 +83,89 @@ export const sortMealOrder = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'
 export const sortMealPlanDays = (result?: MealPlanResult | null) =>
   (result?.days ?? []).slice().sort((a, b) => a.date.localeCompare(b.date));
 
+
+// ── Random plans ──────────────────────────────────────────────────────────────
+// The default planning path. Synchronous: no job id, no polling, no progress
+// screen. See jarvis-recipes-server/app/services/random_plan_service.py.
+
+export type RandomSlot = {
+  date: string;
+  meal_type: string;
+};
+
+export type RandomSlotResult = {
+  date?: string | null;
+  meal_type: string;
+  recipe_id?: number | null;
+  title?: string | null;
+  image_url?: string | null;
+  total_time_minutes?: number | null;
+  servings?: number | null;
+};
+
+export type RandomPlanResponse = {
+  slots: RandomSlotResult[];
+  /** The box ran out before every slot was filled. */
+  incomplete: boolean;
+};
+
+export const randomPlan = async (
+  slots: RandomSlot[],
+  excludeRecipeIds: number[] = [],
+): Promise<RandomPlanResponse> => {
+  const res = await recipesRequest<RandomPlanResponse>({
+    url: '/meal-plans/random',
+    method: 'POST',
+    data: { slots, exclude_recipe_ids: excludeRecipeIds },
+  });
+  return res;
+};
+
+/**
+ * Swap one slot. `excludeRecipeIds` should be everything currently on screen so
+ * the replacement is neither the rejected recipe nor a duplicate of another slot.
+ */
+export const rerollSlot = async (
+  mealType: string,
+  excludeRecipeIds: number[],
+  tags: string[] = [],
+): Promise<RandomSlotResult> => {
+  const res = await recipesRequest<RandomSlotResult>({
+    url: '/meal-plans/random/reroll',
+    method: 'POST',
+    data: { meal_type: mealType, exclude_recipe_ids: excludeRecipeIds, tags },
+  });
+  return res;
+};
+
+
+// ── Committing a plan ─────────────────────────────────────────────────────────
+// Commit turns a proposal into household data. Anything the planner STAGED is
+// materialised into a real recipe server-side, which is why each item carries
+// its source: a staged id is not a recipe id until commit runs.
+
+export type CommitItem = {
+  date: string;
+  meal_type: string;
+  recipe_id: number;
+  source?: 'user' | 'stage';
+};
+
+export type CommittedPlan = {
+  id: number;
+  start_date: string;
+  name?: string | null;
+};
+
+export const commitPlan = async (
+  startDate: string,
+  items: CommitItem[],
+  name?: string,
+): Promise<CommittedPlan> => {
+  const res = await recipesRequest<CommittedPlan>({
+    url: '/planner/commit',
+    method: 'POST',
+    data: { start_date: startDate, name, items },
+  });
+  return res;
+};

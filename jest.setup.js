@@ -23,3 +23,25 @@ jest.mock('expo-secure-store', () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'whenUnlockedThisDeviceOnly',
   AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'afterFirstUnlockThisDeviceOnly',
 }));
+
+// react-native-webview reaches for a native TurboModule at import time, so any
+// test that mounts RecipesNavigator (WebViewExtractScreen imports it) dies before
+// rendering. A stub that records its props is enough — nothing in a test can
+// execute page JS anyway.
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const WebView = React.forwardRef((props, ref) =>
+    React.createElement(View, { ...props, ref, testID: props.testID ?? 'webview' }),
+  );
+  return { __esModule: true, WebView, default: WebView };
+});
+
+// react-test-renderer reports an uncaught render error via window.dispatchEvent.
+// jest-expo's environment has a `window` without it, so React's error REPORTING
+// throws and replaces the real stack with "window.dispatchEvent is not a
+// function" -- which is how a genuine crash arrives disguised as an environment
+// bug. Give it a no-op so the actual error surfaces.
+if (typeof global.window !== 'undefined' && typeof global.window.dispatchEvent !== 'function') {
+  global.window.dispatchEvent = () => true;
+}

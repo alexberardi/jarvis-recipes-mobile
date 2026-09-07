@@ -1,10 +1,29 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
-import { Appbar, Button, Card, HelperText, Text, Chip, IconButton } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Appbar,
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  HelperText,
+  IconButton,
+  Portal,
+  Text,
+} from 'react-native-paper';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { PlannerStackParamList } from '../../navigation/types';
-import { getMealPlanJob, getRecipeBySource, sortMealOrder, sortMealPlanDays } from '../../services/mealPlans';
+import {
+  clearMealPlanJob,
+  commitPlan,
+  getMealPlanJob,
+  getRecipeBySource,
+  rerollSlot,
+  sortMealOrder,
+  sortMealPlanDays,
+} from '../../services/mealPlans';
 import { Alternative, MealPlanResult, MealSlotResult, MealType } from '../../types/MealPlan';
 import { Recipe } from '../../types/Recipe';
 
@@ -13,6 +32,15 @@ type Props = NativeStackScreenProps<PlannerStackParamList, 'MealPlanResults'>;
 const noMatchMessage =
   'Could not find a recipe fitting your criteria. Try loosening your constraints or adding recipes that fit the selections.';
 
+// A slot can fail for two quite different reasons, and telling them apart is the
+// difference between actionable and baffling. "Add recipes that fit" is wrong
+// advice when a matching recipe exists and is simply booked for another day.
+const alreadyUsedMessage =
+  'Every recipe with these tags is already used elsewhere in this plan. Re-roll another day, pick different tags, or add another recipe with this tag.';
+
+const isAlreadyUsed = (selection?: { warnings?: string[] | null } | null) =>
+  (selection?.warnings ?? []).some((w) => w.startsWith('already_used'));
+
 const MealPlanResultsScreen = ({ navigation, route }: Props) => {
   const { jobId } = route.params ?? {};
   const [result, setResult] = useState<MealPlanResult | null>(null);
@@ -20,6 +48,11 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
   const [loading, setLoading] = useState(true);
   const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
   const [expandedAlternatives, setExpandedAlternatives] = useState<Record<string, boolean>>({});
+  const [rerolling, setRerolling] = useState<string | null>(null);
+  const [shuffling, setShuffling] = useState(false);
+  const [swapModal, setSwapModal] = useState<{ date: string; meal: MealType } | null>(null);
+  const [committing, setCommitting] = useState(false);
+  const [committed, setCommitted] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -79,6 +112,202 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
     const rec = await getRecipeBySource(source, id);
     setRecipes((prev) => ({ ...prev, [key]: rec }));
     return rec;
+  };
+
+  /** Every recipe currently on the plan, so a re-roll cannot duplicate one. */
+  const usedRecipeIds = (plan: MealPlanResult | null): number[] =>
+    (plan?.days ?? []).flatMap((day) =>
+      Object.values(day.meals ?? {}).flatMap((slot: any) => {
+        const id = slot?.selection?.recipe_id;
+        if (!id) return [];
+        // STAGED picks carry a stage_recipes UUID, not an integer. Number(uuid)
+        // is NaN, JSON.stringify turns NaN into null, and the server's
+        // exclude_recipe_ids: List[int] rejects null with a 422 -- so a single
+        // staged slot broke re-roll and shuffle for the whole plan.
+        //
+        // Dropping them is correct, not just safe: a staged recipe is not in the
+        // recipes table, so the random picker could never return it anyway and
+        // there is nothing to exclude.
+        const n = Number(id);
+        return Number.isInteger(n) ? [n] : [];
+      }),
+    );
+
+  /**
+   * Re-roll one slot of a generated plan.
+   *
+   * Uses the same random endpoint as the quick planner rather than re-running the
+   * LLM: the person has already seen the LLM's choice and rejected it, so what
+   * they want is a different recipe now, not another twenty seconds of thinking.
+   * The slot's own tags are sent so the swap still respects how it was configured.
+   */
+  const rerollSlot_ = async (date: string, meal: MealType) => {
+    const slotKey = `${date}-${meal}`;
+    setRerolling(slotKey);
+    setError(null);
+    try {
+      const slot = result?.days
+        ?.find((d) => d.date === date)
+        ?.meals?.[meal] as MealSlotResult | undefined;
+
+      const replacement = await rerollSlot(meal, usedRecipeIds(result), slot?.tags ?? []);
+      if (!replacement.recipe_id) return;
+
+      const key = `user:${replacement.recipe_id}`;
+      setRecipes((prev) => ({
+        ...prev,
+        [key]: { id: replacement.recipe_id, title: replacement.title } as any,
+      }));
+
+      setResult((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((day) => {
+            if (day.date !== date) return day;
+            const mealSlot = (day.meals as any)?.[meal] as MealSlotResult | undefined;
+            if (!mealSlot) return day;
+            return {
+              ...day,
+              meals: {
+                ...day.meals,
+                [meal]: {
+                  ...mealSlot,
+                  selection: {
+                    source: 'user',
+                    recipe_id: String(replacement.recipe_id),
+                    confidence: null,
+                    matched_tags: [],
+                    // Re-rolled by hand, so the LLM's alternatives no longer
+                    // describe this slot.
+                    warnings: [],
+                    alternatives: [],
+                  },
+                },
+              },
+            };
+          }),
+        };
+      });
+    } catch (err: any) {
+      setError(
+        err?.response?.status === 409
+          ? 'No other recipe to swap in. Add more recipes to your box.'
+          : err?.response?.data?.detail || err?.message || 'Could not re-roll that meal.',
+      );
+    } finally {
+      setRerolling(null);
+    }
+  };
+
+  /**
+   * Days that could take this slot's meal -- i.e. that have the SAME meal type.
+   *
+   * Swapping a dinner into a lunch slot would be nonsense (and would silently
+   * lose whichever meal had no counterpart), so the modal only ever offers days
+   * that already have the same meal planned.
+   */
+  const swappableDays = (date: string, meal: MealType): string[] =>
+    (result?.days ?? [])
+      .filter((d) => d.date !== date && (d.meals as any)?.[meal]?.selection)
+      .map((d) => d.date);
+
+  /** Exchange two days' selections for one meal type. Purely local. */
+  const swapDays = (meal: MealType, dateA: string, dateB: string) => {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const a = (prev.days.find((d) => d.date === dateA)?.meals as any)?.[meal];
+      const b = (prev.days.find((d) => d.date === dateB)?.meals as any)?.[meal];
+      if (!a || !b) return prev;
+
+      return {
+        ...prev,
+        days: prev.days.map((day) => {
+          if (day.date !== dateA && day.date !== dateB) return day;
+          const incoming = day.date === dateA ? b : a;
+          const own = day.date === dateA ? a : b;
+          return {
+            ...day,
+            meals: {
+              ...day.meals,
+              // Only the SELECTION moves. Servings, tags and notes describe the
+              // slot -- "Tuesday dinner, 4 people" -- not the recipe, so they
+              // stay with the day.
+              [meal]: { ...own, selection: incoming.selection },
+            },
+          };
+        }),
+      };
+    });
+    setSwapModal(null);
+  };
+
+  /**
+   * Save the plan.
+   *
+   * Everything on this screen is local until now -- the generated picks and any
+   * re-rolls, shuffles or swaps on top of them. Commit is what makes it real,
+   * and it is also what turns staged picks into recipes in the household box,
+   * which is why each item sends its source.
+   */
+  const commit = async () => {
+    if (!result?.days?.length) return;
+    setCommitting(true);
+    setError(null);
+    try {
+      const items = result.days.flatMap((day) =>
+        Object.entries(day.meals ?? {}).flatMap(([meal, slot]: [string, any]) => {
+          const sel = slot?.selection;
+          if (!sel?.recipe_id) return [];
+          const id = Number(sel.recipe_id);
+          // Guard rather than send NaN: exclude_recipe_ids taught us what an
+          // unparseable id does to a List[int] endpoint.
+          if (!Number.isInteger(id)) return [];
+          return [
+            {
+              date: day.date,
+              meal_type: meal,
+              recipe_id: id,
+              source: sel.source === 'stage' ? ('stage' as const) : ('user' as const),
+            },
+          ];
+        }),
+      );
+
+      if (!items.length) {
+        setError('Nothing to save yet — every meal is still empty.');
+        return;
+      }
+
+      const startDate = [...result.days].map((d) => d.date).sort()[0];
+      await commitPlan(startDate, items);
+      setCommitted(true);
+      await clearMealPlanJob();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Could not save the plan.');
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+  /** Re-roll every slot in the plan, in order, excluding as it goes. */
+  const shuffleAll = async () => {
+    if (!result) return;
+    setShuffling(true);
+    setError(null);
+    try {
+      for (const day of result.days) {
+        for (const meal of sortMealOrder) {
+          if ((day.meals as any)?.[meal]) {
+            // Sequential on purpose: each swap must see the previous one so the
+            // shuffled plan does not repeat a recipe.
+            await rerollSlot_(day.date, meal as MealType);
+          }
+        }
+      }
+    } finally {
+      setShuffling(false);
+    }
   };
 
   const swapRecipe = (date: string, meal: MealType, alternative: Alternative) => {
@@ -152,7 +381,13 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
     );
   }
 
-  if (error) {
+  // Only take over the screen when there is nothing else to show. Everything on
+  // this screen -- the re-rolls, the shuffles, the day swaps -- is local state,
+  // and going Back re-polls the job, so replacing a loaded plan with a dead-end
+  // error page threw away work the person could not get back. A failed save is
+  // the worst case: the plan is intact and retryable, and the old early return
+  // destroyed it.
+  if (error && !result) {
     return (
       <>
         <Appbar.Header>
@@ -191,13 +426,45 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
 
                 return (
                   <View key={slotKey} style={styles.slot}>
-                    <Text variant="titleSmall" style={styles.mealTitle}>
-                      {meal.charAt(0).toUpperCase() + meal.slice(1)}
-                    </Text>
+                    <View style={styles.mealHeader}>
+                      <Text variant="titleSmall" style={styles.mealTitle}>
+                        {meal.charAt(0).toUpperCase() + meal.slice(1)}
+                      </Text>
+                      {/* Same affordance as the quick planner, so re-rolling
+                          means the same thing in both places. */}
+                      <View style={styles.slotActions}>
+                        {/* Only offered when another day has the same meal to
+                            trade with -- there is nothing to swap otherwise. */}
+                        {selection?.recipe_id &&
+                        swappableDays(day.date, meal as MealType).length > 0 ? (
+                          <IconButton
+                            icon="swap-horizontal"
+                            size={20}
+                            onPress={() => setSwapModal({ date: day.date, meal: meal as MealType })}
+                            disabled={shuffling}
+                            accessibilityLabel={`Swap ${meal} on ${day.date} with another day`}
+                          />
+                        ) : null}
+                        {rerolling === slotKey ? (
+                          <ActivityIndicator size={20} />
+                        ) : (
+                          <IconButton
+                            icon="dice-5-outline"
+                            size={20}
+                            onPress={() => rerollSlot_(day.date, meal as MealType)}
+                            disabled={shuffling}
+                            accessibilityLabel={`Re-roll ${meal} on ${day.date}`}
+                          />
+                        )}
+                      </View>
+                    </View>
                     <Text>Servings: {slot.servings}</Text>
                     {slot.tags?.length ? <Text>Tags: {slot.tags.join(', ')}</Text> : null}
                     {slot.note ? <Text>Note: {slot.note}</Text> : null}
-                    {selection ? (
+                    {/* A slot can carry a selection with no recipe: the server
+                        uses it to say WHY the slot is empty. Gate on the recipe,
+                        not on the selection object. */}
+                    {selection && selection.recipe_id ? (
                       <>
                         <View style={styles.recipeRow}>
                           <Button
@@ -206,9 +473,12 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
                               try {
                                 const rec = await fetchRecipe(selection.source, selection.recipe_id);
                                 if (rec?.id) {
+                                  // Carry the source: a staged pick's id is a
+                                  // stage_recipes UUID, which /recipes/{id}
+                                  // cannot parse.
                                   navigation.getParent()?.navigate('RecipesTab', {
                                     screen: 'RecipeDetail',
-                                    params: { id: rec.id },
+                                    params: { id: rec.id, source: selection.source },
                                   });
                                 }
                               } catch (error) {
@@ -290,7 +560,7 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
                       </>
                     ) : (
                       <HelperText type="error" visible>
-                        {noMatchMessage}
+                        {isAlreadyUsed(selection) ? alreadyUsedMessage : noMatchMessage}
                       </HelperText>
                     )}
                   </View>
@@ -299,12 +569,71 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
             </Card.Content>
           </Card>
         ))}
+        <Portal>
+          <Dialog visible={!!swapModal} onDismiss={() => setSwapModal(null)}>
+            <Dialog.Title>
+              Swap {swapModal?.meal} with
+            </Dialog.Title>
+            <Dialog.Content>
+              <Text variant="bodySmall" style={styles.dialogHint}>
+                Only days that already have a {swapModal?.meal} are listed — a
+                dinner cannot trade places with a lunch.
+              </Text>
+              {swapModal
+                ? swappableDays(swapModal.date, swapModal.meal).map((other) => {
+                    const otherSel = (result?.days.find((d) => d.date === other)?.meals as any)?.[
+                      swapModal.meal
+                    ]?.selection;
+                    const otherKey = otherSel
+                      ? `${otherSel.source}:${otherSel.recipe_id}`
+                      : null;
+                    return (
+                      <Button
+                        key={other}
+                        onPress={() => swapDays(swapModal.meal, swapModal.date, other)}
+                      >
+                        {other}
+                        {otherKey && recipes[otherKey]?.title
+                          ? ` · ${recipes[otherKey].title}`
+                          : ''}
+                      </Button>
+                    );
+                  })
+                : null}
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setSwapModal(null)}>Cancel</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
         <View style={styles.actions}>
-          <Button mode="outlined" disabled>
-            Shuffle (coming soon)
+          {/* Screen-level failures (a re-roll with nothing left to pick, a
+              rejected save) belong beside the buttons that caused them, with the
+              plan still on screen. */}
+          {error ? (
+            <HelperText type="error" visible>
+              {error}
+            </HelperText>
+          ) : null}
+          <Button
+            mode="contained"
+            icon={committed ? 'check' : 'content-save'}
+            onPress={commit}
+            loading={committing}
+            disabled={committing || committed || !result}
+          >
+            {committed ? 'Plan saved' : 'Save this plan'}
           </Button>
-          <Button mode="outlined" disabled>
-            Swap (coming soon)
+          {/* "Swap" is gone: the per-slot dice IS the swap, and a global swap
+              button had no slot to act on. */}
+          <Button
+            mode="outlined"
+            icon="dice-multiple-outline"
+            onPress={shuffleAll}
+            loading={shuffling}
+            disabled={shuffling || !result}
+          >
+            {shuffling ? 'Shuffling…' : 'Shuffle all'}
           </Button>
         </View>
       </ScrollView>
@@ -331,7 +660,17 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 4,
   },
+  slotActions: { flexDirection: 'row', alignItems: 'center' },
+  dialogHint: { marginBottom: 8, opacity: 0.7 },
+  mealHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   mealTitle: {
+    // Never let the dice squeeze the label (see QuickPlanScreen for the same
+    // trap: Text shrinks by default inside a row).
+    flexShrink: 0,
     fontWeight: 'bold',
   },
   recipeRow: {

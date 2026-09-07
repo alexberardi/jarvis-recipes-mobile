@@ -124,7 +124,6 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
   const [invalidIngredientIds, setInvalidIngredientIds] = useState<Set<string>>(new Set());
   const unitRefs = useRef<Record<string, ComponentRef<typeof TextInput> | null>>({});
   const qtyRefs = useRef<Record<string, ComponentRef<typeof TextInput> | null>>({});
-  const [stepHeights, setStepHeights] = useState<number[]>([80]);
   const totalMinutes = useMemo(() => {
     const prep = Number(prepMinutes);
     const cook = Number(cookMinutes);
@@ -237,10 +236,7 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
   const handleRemoveIngredient = (id: string) =>
     setIngredients((prev) => prev.filter((ing) => ing.id !== id));
 
-  const handleAddStep = () => {
-    setSteps((prev) => [...prev, '']);
-    setStepHeights((prev) => [...prev, 80]);
-  };
+  const handleAddStep = () => setSteps((prev) => [...prev, '']);
   const handleStepChange = (text: string, index: number) =>
     setSteps((prev) => prev.map((item, i) => (i === index ? text : item)));
   const handleRemoveStep = (index: number) =>
@@ -701,22 +697,23 @@ const CreateRecipeScreen = ({ navigation, route }: Props) => {
             Steps
           </Text>
           {steps.map((value, index) => (
-            <View style={styles.row} key={`step-${index}`}>
+            // rowAlign, not row: a two-line step should keep its delete button
+            // beside the FIRST line, not floated to the vertical middle of the
+            // field.
+            <View style={styles.rowAlign} key={`step-${index}`}>
               <TextInput
-                style={[styles.flex, styles.stepInput, { height: stepHeights[index] ?? 80 }]}
+                // No explicit height, and no onContentSizeChange bookkeeping.
+                // Setting `height` on a Paper TextInput sizes the OUTER
+                // component while the inner native input keeps its own padding,
+                // so the text was pushed outside the visible area -- a box
+                // reserving 80pt for one line and clipping the top and bottom of
+                // two. `multiline` grows on its own; the Description field above
+                // has always relied on exactly that.
+                style={styles.flex}
                 placeholder={`Step ${index + 1}`}
                 value={value}
                 onChangeText={(text) => handleStepChange(text, index)}
                 multiline
-                textAlignVertical="top"
-                onContentSizeChange={(e) => {
-                  const h = Math.min(Math.max(80, e.nativeEvent.contentSize.height + 12), 160);
-                  setStepHeights((prev) => {
-                    const next = [...prev];
-                    next[index] = h;
-                    return next;
-                  });
-                }}
               />
               {steps.length > 1 && (
                 <IconButton icon="delete" onPress={() => handleRemoveStep(index)} />
@@ -890,10 +887,6 @@ const styles = StyleSheet.create({
   dropdownItemRow: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-  },
-  stepInput: {
-    minHeight: 80,
-    maxHeight: 160,
   },
   sectionHeader: {
     marginTop: 8,

@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from 'react-native-paper';
 
 import AccountNavigator from './AccountNavigator';
+import GroceriesNavigator from './GroceriesNavigator';
 import PlannerNavigator from './PlannerNavigator';
 import RecipesNavigator from './RecipesNavigator';
 import { RootTabParamList } from './types';
@@ -18,6 +19,8 @@ const AppNavigator = () => {
         return 'book-open-page-variant';
       case 'PlannerTab':
         return 'calendar-check';
+      case 'GroceriesTab':
+        return 'cart-outline';
       case 'AccountTab':
       default:
         return 'account-circle';
@@ -49,6 +52,11 @@ const AppNavigator = () => {
         name="PlannerTab"
         component={PlannerNavigator}
         options={{ title: 'Planner' }}
+      />
+      <Tab.Screen
+        name="GroceriesTab"
+        component={GroceriesNavigator}
+        options={{ title: 'Groceries' }}
       />
       <Tab.Screen
         name="AccountTab"

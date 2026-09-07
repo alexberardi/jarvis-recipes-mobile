@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { Appbar, Button, HelperText, ProgressBar, Text } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, HelperText, ProgressBar, Text } from 'react-native-paper';
 import { StyleSheet, View } from 'react-native';
 
 import { PlannerStackParamList } from '../../navigation/types';
@@ -58,8 +58,13 @@ const MealPlanProgressScreen = ({ navigation, route }: Props) => {
       <View style={styles.container}>
         {!error ? (
           <>
-            <Text variant="bodyLarge">{message}</Text>
-            {progress != null ? <ProgressBar progress={progress} /> : null}
+            <ActivityIndicator />
+            <Text variant="bodyLarge" style={styles.message}>
+              {message}
+            </Text>
+            {progress != null ? (
+              <ProgressBar progress={progress} style={styles.progress} />
+            ) : null}
             <Button
               onPress={async () => {
                 abortRef.current?.abort();
@@ -101,7 +106,12 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     justifyContent: 'center',
+    // Was centred vertically only, so the message sat hard left while Paper's
+    // Button centred its own label -- the two looked unrelated.
+    alignItems: 'center',
   },
+  message: { textAlign: 'center' },
+  progress: { alignSelf: 'stretch' },
 });
 
 export default MealPlanProgressScreen;

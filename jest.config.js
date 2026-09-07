@@ -2,6 +2,19 @@
  * Jest config, moved out of package.json so the coverage ratchet below can
  * carry an explanation.
  */
+// Pin the suite east of UTC.
+//
+// Set here, in the parent process, because jest's sandbox ignores a runtime
+// `process.env.TZ =` -- a test that sets it and then asserts is testing nothing.
+//
+// Europe/Berlin rather than UTC on purpose. This app has produced three
+// timezone bugs already (a plan date rendered a day early, a calendar cell
+// carrying the previous day, today greyed out as past), and every one of them
+// is invisible in a UTC or US-local run: `new Date(y, m, d).toISOString()` only
+// shifts the date EAST of UTC. Running there makes the date surface as hostile
+// as it is for half the world.
+process.env.TZ = 'Europe/Berlin';
+
 module.exports = {
   preset: 'jest-expo',
   setupFilesAfterEnv: [
@@ -12,6 +25,12 @@ module.exports = {
     'node_modules/(?!(jest-)?react-native|@react-native|@react-navigation|@react-native-community|expo(nent)?|@expo(nent)?|@expo-google-fonts|@unimodules|unimodules|sentry-expo|native-base)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  moduleNameMapper: {
+    // See __mocks__/expoVectorIcons.js -- expo-asset is unresolvable here, and
+    // the pattern has to cover subpaths because react-native-paper probes
+    // '@expo/vector-icons/MaterialCommunityIcons' for every icon prop.
+    '^@expo/vector-icons(/.*)?$': '<rootDir>/__mocks__/expoVectorIcons.js',
+  },
   // Explicit, so helper/fixture files can live under __tests__ without jest's
   // default "everything in __tests__ is a test" rule picking them up.
   testMatch: ['**/__tests__/**/*.test.ts?(x)'],
@@ -20,21 +39,24 @@ module.exports = {
   // and the threshold below means nothing.
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/mocks/**'],
   // RATCHET, NOT A TARGET. These are the numbers actually measured on the
-  // suite as it stands (statements 20.80 / branches 10.55 / functions 16.72 /
-  // lines 21.63), floored to the next integer down so a rounding wobble can't
+  // suite as it stands (statements 59.08 / branches 38.70 / functions 55.37 /
+  // lines 61.02), floored to the next integer down so a rounding wobble can't
   // red the build. They exist to stop coverage SLIDING, and are meant to be
   // raised — never lowered — as tests land.
   //
-  // RULES.md sets the house target at 80%. The gap is almost entirely the
-  // screen layer: src/api, src/auth and the token/job services are already
-  // 90%+, while most of src/screens has no test at all. Raise these each time
-  // a screen gains coverage.
+  // The jump from ~21% came from __tests__/flows: those mount real navigators
+  // and fake only HTTP, so one flow test walks a whole stack of screens. See
+  // docs/testing.md.
+  //
+  // RULES.md sets the house target at 80%. What is left is mostly
+  // screens/Recipes (the capture and extraction screens, ~32%) and
+  // screens/Account. Raise these each time a screen gains coverage.
   coverageThreshold: {
     global: {
-      statements: 20,
-      branches: 10,
-      functions: 16,
-      lines: 21,
+      statements: 59,
+      branches: 38,
+      functions: 55,
+      lines: 61,
     },
   },
 };

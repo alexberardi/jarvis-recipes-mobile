@@ -11,7 +11,7 @@ import { RecipesStackParamList } from '../../navigation/types';
 type Props = NativeStackScreenProps<RecipesStackParamList, 'RecipeDetail'>;
 
 const RecipeDetailScreen = ({ route, navigation }: Props) => {
-  const { data: recipe, isLoading, refetch } = useRecipe(route.params.id);
+  const { data: recipe, isLoading, refetch } = useRecipe(route.params.id, route.params.source);
 
   // Refetch recipe data when screen comes into focus (e.g., after editing)
   useFocusEffect(

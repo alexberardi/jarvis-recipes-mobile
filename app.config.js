@@ -6,14 +6,14 @@ export default {
     slug: 'jarvis-recipes-mobile',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/logo-dark.png',
+    icon: './assets/logo-mark.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     // expo-secure-store backs the JWT keychain storage (services/tokenStorage).
     // No faceIDPermission: this app never gates an item behind biometrics.
     plugins: ['expo-secure-store'],
     splash: {
-      image: './assets/logo-dark.png',
+      image: './assets/logo-mark.png',
       resizeMode: 'contain',
       backgroundColor: '#0f172a',
     },
@@ -26,7 +26,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: './assets/logo-dark.png',
+        foregroundImage: './assets/logo-mark.png',
         backgroundColor: '#0f172a',
       },
       package: 'com.anonymous.jarvisrecipesmobile',

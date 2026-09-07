@@ -1,5 +1,3 @@
-import { ImageSourcePropType } from 'react-native';
-
 export type RecipeTag = {
   id: number;
   name: string;
@@ -54,28 +52,6 @@ export type NewIngredient = {
   text: string;
   quantityDisplay?: string | null;
   unit?: string | null;
-};
-
-/**
- * Shape of the bundled demo recipes in `src/mocks/recipes.json`.
- *
- * This is NOT the API model: ids are slugs, tags/ingredients/steps are plain
- * strings, and the image is a bundled asset key. Only `services/mockApi` (and
- * the legacy WeeklyPlan screen it feeds) reads it.
- */
-export type RecipeDTO = {
-  id: string;
-  title: string;
-  description: string;
-  tags: string[];
-  imageKey: string;
-  ingredients: string[];
-  steps: string[];
-};
-
-/** A `RecipeDTO` with its `imageKey` resolved to a bundled asset. */
-export type MockRecipe = RecipeDTO & {
-  image: ImageSourcePropType;
 };
 
 export type ParsedRecipe = {

@@ -1,5 +1,3 @@
-import { MockRecipe } from './Recipe';
-
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'dessert';
 
 export type MealSlotRequest = {
@@ -76,19 +74,5 @@ export type ProgressMessage = {
   completed_slots?: number;
   total_slots?: number;
   message?: string;
-};
-
-export type PlannedMeal = {
-  id: string;
-  day: string;
-  mealType: string;
-  recipeId: string;
-  /** Demo-data recipe (see types/Recipe MockRecipe) — this path is mock-only. */
-  recipe?: MockRecipe;
-};
-
-export type WeeklyPlan = {
-  weekOf: string;
-  meals: PlannedMeal[];
 };
 

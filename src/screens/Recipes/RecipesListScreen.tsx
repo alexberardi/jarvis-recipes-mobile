@@ -83,10 +83,14 @@ const RecipesListScreen = ({ navigation }: Props) => {
       <Appbar.Header>
         <Appbar.Content title="Recipes" />
         <View>
-          <Appbar.Action icon="mailbox-outline" onPress={handleOpenMailbox} />
+          <Appbar.Action
+            icon="mailbox-outline"
+            onPress={handleOpenMailbox}
+            accessibilityLabel="Import mailbox"
+          />
           {unseenCount > 0 ? <Badge style={styles.badge}>{unseenCount}</Badge> : null}
         </View>
-        <Appbar.Action icon="plus" onPress={handleAddRecipe} />
+        <Appbar.Action icon="plus" onPress={handleAddRecipe} accessibilityLabel="Add recipe" />
       </Appbar.Header>
       {isLoading ? (
         <LoadingIndicator />
