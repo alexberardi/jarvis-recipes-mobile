@@ -68,7 +68,11 @@ test('logging in replaces the auth stack with the app', async () => {
 
   // The tab bar only exists on the authenticated side of RootNavigator.
   await waitFor(() => expect(screen.getByText('Planner')).toBeTruthy());
-  expect(screen.getByText('Beef Stroganoff')).toBeTruthy();
+  // Waited for, not asserted synchronously: the tab bar appears the moment
+  // `isAuthenticated` flips, while the recipe list is still fetching. Locally it
+  // had usually resolved by now; under CI's slower, coverage-instrumented run it
+  // had not, and this failed there while passing here.
+  await waitFor(() => expect(screen.getByText('Beef Stroganoff')).toBeTruthy());
 });
 
 test('the email is trimmed but the password is sent untouched', async () => {
