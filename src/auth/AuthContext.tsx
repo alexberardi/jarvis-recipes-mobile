@@ -22,6 +22,7 @@ import React, {
 
 import authApi from '../api/authApi';
 import { refreshAuthToken, setAuthHandlers } from '../api/recipesApi';
+import { loadServerUrls } from '../config/serverConfig';
 import { USER_KEY } from '../config/storageKeys';
 import { clearTokens, getTokens, setTokens } from '../services/tokenStorage';
 
@@ -169,6 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const bootstrapAuth = useCallback(async () => {
     try {
+      // BEFORE the tokens are read, and before anything can issue a request:
+      // this app is self-hosted, so the server address is a stored setting and
+      // the axios clients resolve it per request. Leaving it until later would
+      // point the first calls after a cold start -- the token refresh among them
+      // -- at the build's localhost defaults.
+      await loadServerUrls();
+
       const [{ accessToken, refreshToken }, storedUser] = await Promise.all([
         // Migrates any pre-keychain tokens out of AsyncStorage on first run.
         getTokens(),

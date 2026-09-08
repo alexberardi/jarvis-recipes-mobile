@@ -14,3 +14,12 @@ export const LEGACY_REFRESH_TOKEN_KEY = '@jarvis_recipes/refresh_token';
 
 /** Serialized user object. Non-secret, so it stays in AsyncStorage. */
 export const USER_KEY = '@jarvis_recipes/user';
+
+/**
+ * Where this install's Jarvis lives.
+ *
+ * Non-secret, and it has to survive a restart: the app is self-hosted, so a
+ * build cannot know the address and the compiled-in defaults are only useful
+ * on a developer's own machine.
+ */
+export const SERVER_URLS_KEY = '@jarvis_recipes/server_urls';

@@ -37,6 +37,7 @@ The files:
 | `savedPlans.flow.test.tsx` | The saved plan on the planner tab, the plan library, opening and deleting one. |
 | `groceries.flow.test.tsx` | The shopping list, ticking items off, and the Walmart cart export. |
 | `fullJourney.flow.test.tsx` | Sign in → browse → plan → re-roll → sign out, once, in one mounted app. |
+| `serverSwitch.flow.test.tsx` | Setting the self-hosted server address from the landing screen. |
 
 ### What they do not cover
 
@@ -117,6 +118,14 @@ and headers repeat their screen's action label. `lastByText` from the harness
 resolves both cases. `Appbar.Content` hides its title and subtitle the same way
 `Checkbox.Item` hides its label — assert on something else, or give the element
 its own `accessibilityLabel`.
+
+### One thing the flow layer cannot check
+
+It replaces `src/api/*` wholesale, so it proves a setting is stored and displayed
+but never that a request goes near it. `__tests__/api/serverAddress.test.ts`
+drives the real axios interceptors for exactly that reason: freezing the base URL
+at `axios.create` time leaves every flow test green while the app talks to
+localhost.
 
 ## Keeping the tests honest
 

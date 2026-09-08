@@ -39,8 +39,8 @@ module.exports = {
   // and the threshold below means nothing.
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/mocks/**'],
   // RATCHET, NOT A TARGET. These are the numbers actually measured on the
-  // suite as it stands (statements 59.08 / branches 38.70 / functions 55.37 /
-  // lines 61.02), floored to the next integer down so a rounding wobble can't
+  // suite as it stands (statements 62.02 / branches 41.01 / functions 58.54 /
+  // lines 63.75), floored to the next integer down so a rounding wobble can't
   // red the build. They exist to stop coverage SLIDING, and are meant to be
   // raised — never lowered — as tests land.
   //
@@ -53,10 +53,10 @@ module.exports = {
   // screens/Account. Raise these each time a screen gains coverage.
   coverageThreshold: {
     global: {
-      statements: 59,
-      branches: 38,
-      functions: 55,
-      lines: 61,
+      statements: 62,
+      branches: 41,
+      functions: 58,
+      lines: 63,
     },
   },
 };

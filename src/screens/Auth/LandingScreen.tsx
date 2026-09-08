@@ -1,17 +1,33 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Button, Text, useTheme } from 'react-native-paper';
 
 import { AuthStackParamList } from '../../navigation/types';
 import AppLogo from '../../components/AppLogo';
+import ServerUrlDialog from '../../components/ServerUrlDialog';
+import {
+  ServerUrls,
+  getServerUrls,
+  resetServerUrls,
+  saveServerUrls,
+} from '../../config/serverConfig';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Landing'>;
 
 const LandingScreen = ({ navigation }: Props) => {
+  const theme = useTheme();
   // The mark is square now, so full width would be a full-width-TALL block
   // and push the buttons off screen. 55% leaves room for the title, the
   // strapline and both actions without scrolling.
   const logoSize = Math.round(Dimensions.get('window').width * 0.55);
+
+  const [urls, setUrls] = useState<ServerUrls>(getServerUrls());
+  const [dialogVisible, setDialogVisible] = useState(false);
+
+  // Host and port only. The full URL is long, wraps, and the scheme is noise on
+  // a line whose job is to answer "which server am I about to log in to?".
+  const shortAddress = urls.recipes.replace(/^https?:\/\//i, '');
 
   return (
   <View style={styles.container}>
@@ -33,11 +49,44 @@ const LandingScreen = ({ navigation }: Props) => {
         Create Account
       </Button>
     </View>
+
+    {/* Before signing in, not buried in settings. Jarvis is self-hosted, so
+        "which server?" is a question the FIRST screen has to answer -- and an
+        account only exists on one of them. */}
+    <Button
+      mode="text"
+      compact
+      icon="pencil-outline"
+      onPress={() => setDialogVisible(true)}
+      accessibilityLabel={`Server address: ${shortAddress}. Tap to change.`}
+      labelStyle={[styles.serverLabel, { color: theme.colors.onSurfaceVariant }]}
+      style={styles.server}
+    >
+      {shortAddress}
+    </Button>
+
+    <ServerUrlDialog
+      visible={dialogVisible}
+      urls={urls}
+      onDismiss={() => setDialogVisible(false)}
+      onSave={async (next) => setUrls(await saveServerUrls(next))}
+      onReset={async () => {
+        setUrls(await resetServerUrls());
+        setDialogVisible(false);
+      }}
+    />
   </View>
 );
 };
 
 const styles = StyleSheet.create({
+  server: {
+    marginTop: 24,
+    alignSelf: 'center',
+  },
+  serverLabel: {
+    fontSize: 12,
+  },
   container: {
     flex: 1,
     padding: 24,
