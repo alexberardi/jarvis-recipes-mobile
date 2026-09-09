@@ -1,72 +1,81 @@
 /**
  * Where this install's Jarvis lives.
  *
- * Modelled on jarvis-node-mobile's server switcher, minus the network scan: a
- * self-hosted app cannot ship its endpoints, but discovering them costs an iOS
- * local-network prompt before the person has decided to trust the app, and fails
- * silently on any network that isolates clients.
+ * One address: jarvis-config-service. It knows every other service's
+ * externally-reachable coordinates, so the app asks it rather than making
+ * someone type each one — and moving a service to a new host stops being an app
+ * problem.
+ *
+ * The per-service fields are still here, behind "Advanced", because a service
+ * nobody has added on the admin Services page will not be discovered and needs
+ * pinning by hand. They win over discovery when set.
  */
 import { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
-import { Button, Dialog, HelperText, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { StyleSheet, View } from 'react-native';
+import {
+  Button,
+  Dialog,
+  Divider,
+  HelperText,
+  Portal,
+  Text,
+  TextInput,
+  useTheme,
+} from 'react-native-paper';
 
 import {
-  AUTH_DEFAULT_PORT,
-  RECIPES_DEFAULT_PORT,
+  CONFIG_DEFAULT_PORT,
+  ServerSettings,
   ServerUrls,
-  deriveCompanionUrl,
   isValidUrl,
-  normalizeUrl,
 } from '../config/serverConfig';
 
 type Props = {
   visible: boolean;
-  urls: ServerUrls;
+  settings: ServerSettings;
+  resolved: ServerUrls;
   onDismiss: () => void;
-  onSave: (urls: ServerUrls) => Promise<void> | void;
+  onSave: (configUrl: string, overrides: Partial<ServerUrls>) => Promise<void> | void;
   onReset?: () => Promise<void> | void;
 };
 
-const ServerUrlDialog = ({ visible, urls, onDismiss, onSave, onReset }: Props) => {
+const ServerUrlDialog = ({
+  visible,
+  settings,
+  resolved,
+  onDismiss,
+  onSave,
+  onReset,
+}: Props) => {
   const theme = useTheme();
-  const [recipes, setRecipes] = useState(urls.recipes);
-  const [auth, setAuth] = useState(urls.auth);
-  const [touchedAuth, setTouchedAuth] = useState(false);
+  const [configUrl, setConfigUrl] = useState(settings.configUrl);
+  const [authOverride, setAuthOverride] = useState(settings.overrides.auth ?? '');
+  const [recipesOverride, setRecipesOverride] = useState(settings.overrides.recipes ?? '');
+  const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Re-seed each time it opens: the dialog stays mounted, so without this it
-  // would show whatever was typed and abandoned last time.
+  // Re-seed each time it opens: the dialog stays mounted, so otherwise it shows
+  // whatever was typed and abandoned last time.
   useEffect(() => {
-    if (visible) {
-      setRecipes(urls.recipes);
-      setAuth(urls.auth);
-      setTouchedAuth(false);
-    }
-  }, [visible, urls.auth, urls.recipes]);
+    if (!visible) return;
+    setConfigUrl(settings.configUrl);
+    setAuthOverride(settings.overrides.auth ?? '');
+    setRecipesOverride(settings.overrides.recipes ?? '');
+    // Opened already expanded when an override is in play, so a pinned address
+    // is not hidden from the person looking for why discovery is being ignored.
+    setAdvanced(Boolean(settings.overrides.auth || settings.overrides.recipes));
+  }, [visible, settings]);
 
-  /**
-   * Fill in the auth address from the recipes one, until it is edited by hand.
-   *
-   * Both services on one host at their documented ports is the overwhelmingly
-   * common install. It is a guess, so it is shown in the field rather than
-   * applied invisibly, and anything reverse-proxied can be corrected before
-   * saving.
-   */
-  const handleRecipesChange = (value: string) => {
-    setRecipes(value);
-    if (touchedAuth) return;
-    const derived = deriveCompanionUrl(value, AUTH_DEFAULT_PORT);
-    if (derived) setAuth(derived);
-  };
-
-  const recipesValid = isValidUrl(recipes);
-  const authValid = isValidUrl(auth);
+  const configValid = !configUrl.trim() || isValidUrl(configUrl);
+  const authValid = !authOverride.trim() || isValidUrl(authOverride);
+  const recipesValid = !recipesOverride.trim() || isValidUrl(recipesOverride);
+  const canSave = configValid && authValid && recipesValid;
 
   const handleSave = async () => {
-    if (!recipesValid || !authValid) return;
+    if (!canSave) return;
     setSaving(true);
     try {
-      await onSave({ auth: normalizeUrl(auth), recipes: normalizeUrl(recipes) });
+      await onSave(configUrl, { auth: authOverride, recipes: recipesOverride });
       onDismiss();
     } finally {
       setSaving(false);
@@ -79,36 +88,82 @@ const ServerUrlDialog = ({ visible, urls, onDismiss, onSave, onReset }: Props) =
         <Dialog.Title>Server address</Dialog.Title>
         <Dialog.Content>
           <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
-            Where your Jarvis is running. On a standard install both services are
-            on the same machine, so filling in the first fills in the second.
+            The address of your Jarvis config service. Everything else is looked
+            up from it.
           </Text>
           <TextInput
             mode="outlined"
-            label="Recipes server"
-            value={recipes}
-            onChangeText={handleRecipesChange}
+            label="Jarvis address"
+            value={configUrl}
+            onChangeText={setConfigUrl}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            placeholder={`http://192.168.1.10:${RECIPES_DEFAULT_PORT}`}
-            error={recipes.length > 0 && !recipesValid}
+            placeholder={`http://192.168.1.10:${CONFIG_DEFAULT_PORT}`}
+            error={configUrl.length > 0 && !configValid}
           />
-          <TextInput
-            mode="outlined"
-            label="Auth server"
-            value={auth}
-            onChangeText={(value) => {
-              setTouchedAuth(true);
-              setAuth(value);
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder={`http://192.168.1.10:${AUTH_DEFAULT_PORT}`}
-            error={auth.length > 0 && !authValid}
-            style={styles.second}
-          />
-          {(recipes.length > 0 && !recipesValid) || (auth.length > 0 && !authValid) ? (
+
+          {/* What it actually resolved to. Without this, a wrong address and a
+              right one look identical until a request fails. */}
+          <View style={styles.resolved}>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Using
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              recipes · {resolved.recipes.replace(/^https?:\/\//i, '')}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              auth · {resolved.auth.replace(/^https?:\/\//i, '')}
+            </Text>
+          </View>
+
+          <Button
+            compact
+            mode="text"
+            onPress={() => setAdvanced((open) => !open)}
+            icon={advanced ? 'chevron-up' : 'chevron-down'}
+            style={styles.advancedToggle}
+          >
+            Advanced
+          </Button>
+
+          {advanced ? (
+            <>
+              <Divider style={styles.divider} />
+              <Text
+                variant="bodySmall"
+                style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                Set these only for a service your config service does not list —
+                they override what it says.
+              </Text>
+              <TextInput
+                mode="outlined"
+                label="Recipes server (optional)"
+                value={recipesOverride}
+                onChangeText={setRecipesOverride}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                dense
+                error={recipesOverride.length > 0 && !recipesValid}
+              />
+              <TextInput
+                mode="outlined"
+                label="Auth server (optional)"
+                value={authOverride}
+                onChangeText={setAuthOverride}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                dense
+                style={styles.second}
+                error={authOverride.length > 0 && !authValid}
+              />
+            </>
+          ) : null}
+
+          {!canSave ? (
             <HelperText type="error" visible>
               That does not look like an address. A host and port is enough —
               http:// is added for you.
@@ -122,11 +177,7 @@ const ServerUrlDialog = ({ visible, urls, onDismiss, onSave, onReset }: Props) =
             </Button>
           ) : null}
           <Button onPress={onDismiss}>Cancel</Button>
-          <Button
-            onPress={handleSave}
-            loading={saving}
-            disabled={saving || !recipesValid || !authValid}
-          >
+          <Button onPress={handleSave} loading={saving} disabled={saving || !canSave}>
             Save
           </Button>
         </Dialog.Actions>
@@ -137,6 +188,9 @@ const ServerUrlDialog = ({ visible, urls, onDismiss, onSave, onReset }: Props) =
 
 const styles = StyleSheet.create({
   hint: { marginBottom: 12 },
+  resolved: { marginTop: 12, gap: 2 },
+  advancedToggle: { alignSelf: 'flex-start', marginTop: 8 },
+  divider: { marginBottom: 12 },
   second: { marginTop: 8 },
 });
 

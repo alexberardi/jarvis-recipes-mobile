@@ -38,8 +38,8 @@ module.exports = {
   // otherwise the headline number moves for reasons unrelated to test quality
   // and the threshold below means nothing.
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/mocks/**'],
-  // RATCHET, NOT A TARGET. Measured here as statements 62.02 / branches 41.01 /
-  // functions 58.54 / lines 63.75, then set a WHOLE POINT below that.
+  // RATCHET, NOT A TARGET. Measured here as statements 62.58 / branches 42.07 /
+  // functions 58.69 / lines 64.38, then set a WHOLE POINT below that.
   //
   // Not floored to the next integer: CI measured 61.98% for statements against
   // a local 62.02% and failed a threshold of 62. The number differs slightly

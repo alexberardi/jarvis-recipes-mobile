@@ -7,10 +7,13 @@ import { AuthStackParamList } from '../../navigation/types';
 import AppLogo from '../../components/AppLogo';
 import ServerUrlDialog from '../../components/ServerUrlDialog';
 import {
+  ServerSettings,
   ServerUrls,
+  getServerSettings,
   getServerUrls,
   resetServerUrls,
-  saveServerUrls,
+  setConfigUrl,
+  setOverride,
 } from '../../config/serverConfig';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Landing'>;
@@ -23,6 +26,7 @@ const LandingScreen = ({ navigation }: Props) => {
   const logoSize = Math.round(Dimensions.get('window').width * 0.55);
 
   const [urls, setUrls] = useState<ServerUrls>(getServerUrls());
+  const [settings, setSettings] = useState<ServerSettings>(getServerSettings());
   const [dialogVisible, setDialogVisible] = useState(false);
 
   // Host and port only. The full URL is long, wraps, and the scheme is noise on
@@ -67,11 +71,21 @@ const LandingScreen = ({ navigation }: Props) => {
 
     <ServerUrlDialog
       visible={dialogVisible}
-      urls={urls}
+      settings={settings}
+      resolved={urls}
       onDismiss={() => setDialogVisible(false)}
-      onSave={async (next) => setUrls(await saveServerUrls(next))}
+      onSave={async (configUrl, overrides) => {
+        // Overrides first: setConfigUrl triggers discovery, and an override that
+        // lands after it would not be reflected in what we then read back.
+        await setOverride('auth', overrides.auth ?? null);
+        await setOverride('recipes', overrides.recipes ?? null);
+        await setConfigUrl(configUrl);
+        setSettings(getServerSettings());
+        setUrls(getServerUrls());
+      }}
       onReset={async () => {
         setUrls(await resetServerUrls());
+        setSettings(getServerSettings());
         setDialogVisible(false);
       }}
     />
