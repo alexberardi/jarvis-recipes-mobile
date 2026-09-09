@@ -150,9 +150,25 @@ EXPO_PUBLIC_RECIPES_API_BASE_URL=http://localhost:7030
 ```
 
 `src/config/env.ts` falls back to those same localhost values when the vars are
-unset. Store builds must have real values supplied as EAS environment variables
-/ GitHub Environment secrets — `eas.json`'s `preview` and `production` profiles
-reference them by `${...}` and will resolve empty otherwise.
+unset, empty, **or still an unexpanded `${...}` placeholder**.
+
+That last case is not hypothetical. EAS does **not** interpolate `${VAR}` inside
+`eas.json`'s `env` block — those are literal strings, so a profile written as
+
+```json
+"env": { "EXPO_PUBLIC_RECIPES_API_BASE_URL": "${EXPO_PUBLIC_RECIPES_API_BASE_URL}" }
+```
+
+shipped a build whose value *was* the placeholder text. It flowed through
+`DEFAULT_URLS` into `LandingScreen`'s `shortAddress`, so the first screen of a
+store build displayed `${EXPO_PUBLIC_RECIPES_API_BASE_URL}` where the server
+address belongs.
+
+Store builds get their values from **EAS environment variables**, which is what
+the `environment` key on each profile binds to (`preview` / `production`). Set
+them with `eas env:create` or in the EAS dashboard — never by referencing them
+from the `env` block. `__tests__/config/env.test.ts` fails the build if a
+`${...}` placeholder reappears in `eas.json`.
 
 ## Deployment
 
