@@ -6,6 +6,14 @@ export type RecipeTag = {
 export type RecipeIngredient = {
   id: number;
   text: string;
+  /**
+   * The amount lives in its own fields; `text` holds only the item. The API has
+   * always returned these (IngredientRead), but this type omitted them, so the
+   * detail screen could not show an amount even when one was stored.
+   */
+  quantity_display?: string | null;
+  quantity_value?: number | null;
+  unit?: string | null;
 };
 
 export type RecipeStep = {
