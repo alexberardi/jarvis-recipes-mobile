@@ -7,6 +7,7 @@ import { Appbar, Card, Chip, List, Text } from 'react-native-paper';
 import LoadingIndicator from '../../components/LoadingIndicator';
 import { useRecipe } from '../../hooks/useRecipes';
 import { RecipesStackParamList } from '../../navigation/types';
+import { formatIngredient } from '../../utils/formatIngredient';
 
 type Props = NativeStackScreenProps<RecipesStackParamList, 'RecipeDetail'>;
 
@@ -74,7 +75,8 @@ const RecipeDetailScreen = ({ route, navigation }: Props) => {
             {recipe.ingredients.map((item) => (
               <List.Item
                 key={item.id}
-                title={item.text}
+                title={formatIngredient(item)}
+                titleNumberOfLines={2}
                 left={(props) => <List.Icon {...props} icon="checkbox-blank-circle-outline" />}
               />
             ))}
