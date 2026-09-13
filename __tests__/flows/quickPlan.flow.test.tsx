@@ -289,3 +289,131 @@ test('a failed save keeps the plan on screen to retry', async () => {
   expect(screen.getByText('Tacos')).toBeTruthy();
   expect(screen.getByText('Save this plan')).toBeTruthy();
 });
+
+/**
+ * Locking a meal.
+ *
+ * "Re-roll all" regenerates the week server-side, so a locked meal has to be
+ * kept OUT of the request and stitched back in afterwards. Asking for every
+ * slot and discarding the ones that came back would spend recipes on meals it
+ * then throws away, making the unlocked days more likely to repeat.
+ */
+const lock = async (label: RegExp) => {
+  fireEvent.press(await screen.findByLabelText(label));
+};
+
+test('re-roll all does not ask for a locked meal', async () => {
+  const week = upcomingDates(7);
+  route('GET', '/planner/current', {});
+  route('POST', '/meal-plans/random', {
+    slots: [
+      randomSlot({ date: week[0], recipe_id: 4, title: 'Tacos' }),
+      randomSlot({ date: week[1], recipe_id: 9, title: 'Steak and Fries' }),
+    ],
+    incomplete: false,
+  });
+
+  renderInApp(<PlannerNavigator />);
+  // Two days only, so the assertion below is about the lock and not the picker.
+  fireEvent.press(await screen.findByText(/^Plan \d+ meals$/));
+  await screen.findByText('Tacos');
+
+  await lock(new RegExp(`Lock dinner on ${week[0]}`));
+
+  route('POST', '/meal-plans/random', {
+    slots: [randomSlot({ date: week[1], recipe_id: 11, title: 'Chicken Fried Rice' })],
+    incomplete: false,
+  });
+  fireEvent.press(screen.getByText('Re-roll all'));
+
+  await waitFor(() => expect(screen.getByText('Chicken Fried Rice')).toBeTruthy());
+
+  // The locked day is absent from the request...
+  const asked = lastCallTo('POST', '/meal-plans/random')!.data.slots as any[];
+  expect(asked.some((s) => s.date === week[0])).toBe(false);
+  // ...and its recipe is still excluded, or the re-roll could hand the same
+  // recipe to an unlocked day and the week would show it twice.
+  expect(lastCallTo('POST', '/meal-plans/random')!.data.exclude_recipe_ids).toContain(4);
+});
+
+test('a locked meal survives re-roll all', async () => {
+  const week = upcomingDates(7);
+  route('GET', '/planner/current', {});
+  route('POST', '/meal-plans/random', {
+    slots: [
+      randomSlot({ date: week[0], recipe_id: 4, title: 'Tacos' }),
+      randomSlot({ date: week[1], recipe_id: 9, title: 'Steak and Fries' }),
+    ],
+    incomplete: false,
+  });
+
+  renderInApp(<PlannerNavigator />);
+  fireEvent.press(await screen.findByText(/^Plan \d+ meals$/));
+  await screen.findByText('Tacos');
+  await lock(new RegExp(`Lock dinner on ${week[0]}`));
+
+  route('POST', '/meal-plans/random', {
+    slots: [randomSlot({ date: week[1], recipe_id: 11, title: 'Chicken Fried Rice' })],
+    incomplete: false,
+  });
+  fireEvent.press(screen.getByText('Re-roll all'));
+
+  await waitFor(() => expect(screen.getByText('Chicken Fried Rice')).toBeTruthy());
+  expect(screen.getByText('Tacos')).toBeTruthy();
+  expect(screen.queryByText('Steak and Fries')).toBeNull();
+});
+
+test('locking every meal refuses rather than sending an empty request', async () => {
+  // Narrowed to one day on purpose: "re-roll all" re-requests the PICKER's
+  // selection, not just the slots on screen, so with seven days selected and
+  // one slot returned there is always something left unlocked to re-roll.
+  const week = upcomingDates(7);
+  route('GET', '/planner/current', {});
+  route('POST', '/meal-plans/random', {
+    slots: [randomSlot({ date: week[0], recipe_id: 4, title: 'Tacos' })],
+    incomplete: false,
+  });
+
+  renderInApp(<PlannerNavigator />);
+  await screen.findByText('Days');
+  const label = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00`);
+    return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.getDate()}`;
+  };
+  week.slice(1).forEach((date) => fireEvent.press(screen.getByText(label(date))));
+  fireEvent.press(screen.getByText(/^Plan \d+ meals$/));
+  await screen.findByText('Tacos');
+
+  await lock(new RegExp(`Lock dinner on ${week[0]}`));
+
+  const before = lastCallTo('POST', '/meal-plans/random');
+  fireEvent.press(screen.getByText('Re-roll all'));
+
+  await waitFor(() => expect(screen.getByText(/Every meal is locked/i)).toBeTruthy());
+  expect(lastCallTo('POST', '/meal-plans/random')).toBe(before);
+});
+
+test('a locked meal is still saved with the rest', async () => {
+  const week = upcomingDates(7);
+  route('GET', '/planner/current', {});
+  route('POST', '/meal-plans/random', {
+    slots: [randomSlot({ date: week[0], recipe_id: 4, title: 'Tacos' })],
+    incomplete: false,
+  });
+  route('POST', '/planner/commit', { id: 40, start_date: week[0] });
+
+  renderInApp(<PlannerNavigator />);
+  fireEvent.press(await screen.findByText(/^Plan \d+ meals$/));
+  await screen.findByText('Tacos');
+  await lock(new RegExp(`Lock dinner on ${week[0]}`));
+
+  fireEvent.press(screen.getByText('Save this plan'));
+
+  await waitFor(() => expect(lastCallTo('POST', '/planner/commit')).toBeDefined());
+  expect(lastCallTo('POST', '/planner/commit')!.data.items).toContainEqual({
+    date: week[0],
+    meal_type: 'dinner',
+    recipe_id: 4,
+    source: 'user',
+  });
+});
