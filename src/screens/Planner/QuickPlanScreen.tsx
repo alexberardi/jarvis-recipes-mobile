@@ -28,7 +28,12 @@ import {
 
 import PlanDays from '../../components/PlanDays';
 import { PlannerStackParamList } from '../../navigation/types';
-import { RandomSlotResult, randomPlan, rerollSlot } from '../../services/mealPlans';
+import {
+  RandomSlotResult,
+  commitPlan,
+  randomPlan,
+  rerollSlot,
+} from '../../services/mealPlans';
 import { Plan, getCurrentPlan } from '../../services/plans';
 
 type Props = NativeStackScreenProps<PlannerStackParamList, 'QuickPlan'>;
@@ -65,6 +70,7 @@ const QuickPlanScreen = ({ navigation }: Props) => {
   const [busy, setBusy] = useState(false);
   const [rerolling, setRerolling] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [committing, setCommitting] = useState(false);
   const [saved, setSaved] = useState<Plan | null>(null);
   const [loadingSaved, setLoadingSaved] = useState(true);
 
@@ -92,6 +98,53 @@ const QuickPlanScreen = ({ navigation }: Props) => {
       };
     }, []),
   );
+
+  /**
+   * Save the generated week.
+   *
+   * Everything above this is local state: the picks and any re-rolls on top of
+   * them. Without a commit the plan was lost the moment the tab changed --
+   * generating felt like it worked and nothing was stored. The advanced flow
+   * had this all along ("Save this plan"); the quick flow never did.
+   */
+  const save = async () => {
+    if (!slots?.length) return;
+    setCommitting(true);
+    setError(null);
+    try {
+      const items = slots.flatMap((slot) => {
+        // An empty slot is a real outcome -- the picker can ask for more meals
+        // than there are recipes -- so skip it rather than send a null id.
+        if (!slot.date || !slot.recipe_id) return [];
+        const id = Number(slot.recipe_id);
+        if (!Number.isInteger(id)) return [];
+        return [
+          {
+            date: slot.date,
+            meal_type: slot.meal_type,
+            recipe_id: id,
+            // The quick planner draws from recipes already in the box.
+            source: 'user' as const,
+          },
+        ];
+      });
+
+      if (!items.length) {
+        setError('Nothing to save yet — every meal is still empty.');
+        return;
+      }
+
+      const startDate = items.map((i) => i.date).sort()[0];
+      await commitPlan(startDate, items);
+      // Show it in the saved block above instead of leaving a stale plan there.
+      setSaved(await getCurrentPlan());
+      setSlots(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Could not save the plan.');
+    } finally {
+      setCommitting(false);
+    }
+  };
 
   const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
@@ -312,6 +365,16 @@ const QuickPlanScreen = ({ navigation }: Props) => {
                 />
               </Card>
             ))}
+
+            <Button
+              mode="contained"
+              onPress={save}
+              loading={committing}
+              disabled={busy || committing}
+              style={styles.action}
+            >
+              Save this plan
+            </Button>
           </>
         ) : null}
       </ScrollView>
