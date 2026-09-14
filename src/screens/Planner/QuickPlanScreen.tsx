@@ -383,7 +383,7 @@ const QuickPlanScreen = ({ navigation }: Props) => {
                 Your week
               </Text>
               <Button compact onPress={rerollAll} disabled={busy}>
-                Re-roll all
+                Re-roll unlocked
               </Button>
             </View>
 
@@ -415,7 +415,7 @@ const QuickPlanScreen = ({ navigation }: Props) => {
                           <IconButton
                             icon="dice-5-outline"
                             onPress={() => rerollOne(index)}
-                            // A lock that only stopped "re-roll all" would be a
+                            // A lock that only stopped "Re-roll unlocked" would be a
                             // lie: the dice on a locked card must be dead too.
                             disabled={busy || isLocked}
                             accessibilityLabel={`Re-roll ${slot.meal_type} on ${slot.date}`}
