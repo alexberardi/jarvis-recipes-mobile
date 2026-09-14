@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Appbar,
   Button,
-  Checkbox,
+  Icon,
   Chip,
   Divider,
   HelperText,
@@ -167,7 +167,6 @@ const ShoppingListScreen = ({ navigation }: Props) => {
                   accessibilityLabel={amounts ? `${item.name}, ${amounts}` : item.name}
                 >
                   <View style={styles.item}>
-                    <Checkbox status={isChecked ? 'checked' : 'unchecked'} />
                     <View style={styles.itemText}>
                       <Text
                         variant="bodyLarge"
@@ -187,6 +186,19 @@ const ShoppingListScreen = ({ navigation }: Props) => {
                           {item.recipes.length ? ` · ${item.recipes.join(', ')}` : ''}
                         </Text>
                       ) : null}
+                    </View>
+                    {/* A plain Icon, not an IconButton: the whole row is
+                        already the pressable and carries the checkbox role,
+                        so a nested button would add a second overlapping hit
+                        target and a second thing for a screen reader to land
+                        on. The trash still responds because it sits inside
+                        the row's target. */}
+                    <View testID={`grocery-remove-${item.name}`}>
+                      <Icon
+                        source="trash-can-outline"
+                        size={22}
+                        color={theme.colors.onSurfaceVariant}
+                      />
                     </View>
                   </View>
                 </TouchableRipple>
@@ -293,7 +305,7 @@ const styles = StyleSheet.create({
   // flexShrink 0: without it the count on the right squeezes "12 to buy" down to
   // "12", the same way "Your week" became "Your".
   listTitle: { flexShrink: 0 },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 8 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 8 },
   // flex so a long ingredient wraps instead of pushing the row off screen.
   itemText: { flex: 1, paddingVertical: 6 },
   itemDone: { textDecorationLine: 'line-through', opacity: 0.5 },
