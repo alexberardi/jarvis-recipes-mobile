@@ -5,7 +5,7 @@
  * the same plan looks the same wherever it is read.
  */
 import { StyleSheet, View } from 'react-native';
-import { Card, Text, TouchableRipple, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Card, IconButton, Text, TouchableRipple, useTheme } from 'react-native-paper';
 
 import { PlanItem, groupByDay } from '../services/plans';
 
@@ -27,9 +27,20 @@ const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 type Props = {
   items: PlanItem[];
   onPressMeal?: (item: PlanItem) => void;
+  /**
+   * Move a meal to the previous or next day the plan already covers.
+   *
+   * Adjacent-day rather than free choice of date: the plan's span stays what
+   * the cook committed, and every move is then either into an empty slot or a
+   * swap -- both of which the server already handles. Arrows at the ends are
+   * disabled rather than wrapping around or silently extending the week.
+   */
+  onMoveMeal?: (item: PlanItem, direction: 'earlier' | 'later') => void;
+  /** Item id currently being moved, so its row can show progress. */
+  movingItemId?: number | null;
 };
 
-const PlanDays = ({ items, onPressMeal }: Props) => {
+const PlanDays = ({ items, onPressMeal, onMoveMeal, movingItemId }: Props) => {
   const theme = useTheme();
   const days = groupByDay(items);
 
@@ -43,7 +54,7 @@ const PlanDays = ({ items, onPressMeal }: Props) => {
 
   return (
     <>
-      {days.map((day) => (
+      {days.map((day, dayIndex) => (
         <Card key={day.date} style={styles.card} mode="outlined">
           <Card.Title title={dayLabel(day.date)} titleVariant="titleMedium" />
           <Card.Content style={styles.content}>
@@ -72,6 +83,28 @@ const PlanDays = ({ items, onPressMeal }: Props) => {
                       {meal.total_time_minutes}m
                     </Text>
                   ) : null}
+                  {onMoveMeal ? (
+                    movingItemId === meal.id ? (
+                      <ActivityIndicator size={20} style={styles.moving} />
+                    ) : (
+                      <View style={styles.moveActions}>
+                        <IconButton
+                          icon="chevron-up"
+                          size={20}
+                          disabled={dayIndex === 0}
+                          onPress={() => onMoveMeal(meal, 'earlier')}
+                          accessibilityLabel={`Move ${meal.meal_type} on ${day.date} earlier`}
+                        />
+                        <IconButton
+                          icon="chevron-down"
+                          size={20}
+                          disabled={dayIndex === days.length - 1}
+                          onPress={() => onMoveMeal(meal, 'later')}
+                          accessibilityLabel={`Move ${meal.meal_type} on ${day.date} later`}
+                        />
+                      </View>
+                    )
+                  ) : null}
                 </View>
               </TouchableRipple>
             ))}
@@ -84,6 +117,8 @@ const PlanDays = ({ items, onPressMeal }: Props) => {
 
 const styles = StyleSheet.create({
   card: { marginTop: 8 },
+  moveActions: { flexDirection: 'row', alignItems: 'center' },
+  moving: { marginHorizontal: 18 },
   content: { paddingHorizontal: 0, paddingBottom: 8 },
   row: {
     flexDirection: 'row',

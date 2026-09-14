@@ -44,6 +44,27 @@ export const getPlan = async (id: number): Promise<Plan> =>
 export const deletePlan = async (id: number): Promise<void> =>
   recipesRequest<void>({ url: `/planner/plans/${id}`, method: 'DELETE' });
 
+export type PlanItemMove = {
+  item_id: number;
+  date: string;
+  meal_type: string;
+};
+
+/**
+ * Rearrange a saved plan in place.
+ *
+ * A list of moves rather than one so a swap is atomic: two calls would leave
+ * both meals on the same day in between, and the second failing would leave the
+ * plan wrong. The server resolves a move onto an occupied slot by swapping, and
+ * returns the whole plan so the caller does not have to guess the result.
+ */
+export const movePlanItems = async (id: number, moves: PlanItemMove[]): Promise<Plan> =>
+  recipesRequest<Plan>({
+    url: `/planner/plans/${id}/items`,
+    method: 'PATCH',
+    data: { moves },
+  });
+
 /**
  * The plan to show for "what are we eating".
  *
