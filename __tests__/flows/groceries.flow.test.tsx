@@ -258,3 +258,22 @@ describe('exporting to Walmart', () => {
     expect(screen.getByText('ground beef')).toBeTruthy();
   });
 });
+
+test('each item carries a trash affordance, not a checkbox', async () => {
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), item('rice', 2, 'cups')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('2 to buy')).toBeTruthy());
+
+  // The control is a trash can on the right, not a checkbox on the left:
+  // "take it off my list" is what the tap means to someone in a shop. Nothing
+  // else in this file would notice the affordance changing back, because the
+  // press goes through the row's label either way.
+  expect(screen.getByTestId('grocery-remove-ground beef')).toBeTruthy();
+  expect(screen.getByTestId('grocery-remove-rice')).toBeTruthy();
+
+  // And it is still the whole row that toggles, so the trash is reachable by
+  // tapping anywhere on the line -- the hit target a checkbox used to give.
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+});
