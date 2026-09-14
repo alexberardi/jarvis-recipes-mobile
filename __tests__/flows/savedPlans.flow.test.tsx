@@ -191,3 +191,110 @@ test('a refused delete keeps the plan on screen', async () => {
   await waitFor(() => expect(screen.getByText('Could not delete that plan.')).toBeTruthy());
   expect(screen.getByText('Thai Basil Chicken')).toBeTruthy();
 });
+
+/**
+ * Rearranging a saved plan.
+ *
+ * Before PATCH /planner/plans/{id}/items the only way to change a committed
+ * plan was to delete it and start again, so moving one meal meant losing the
+ * rest. Asserted over the wire: the body is what the server acts on, and a
+ * move that patches local state without leaving the app looks identical here.
+ */
+const openPlan = async () => {
+  route('GET', '/planner/current', {});
+  route('GET', PLANS_LIST, [SUMMARY]);
+  route('GET', '/planner/plans/2', PLAN);
+
+  renderInApp(<PlannerNavigator />);
+  fireEvent.press(await screen.findByLabelText('Saved plans'));
+  fireEvent.press(await screen.findByLabelText(/Meal plan, Sunday 6/));
+  await waitFor(() => expect(screen.getByText('Meatloaf Recipe')).toBeTruthy());
+};
+
+test('moving a meal earlier patches the plan', async () => {
+  await openPlan();
+  route('PATCH', '/planner/plans/2/items', {
+    ...PLAN,
+    items: [
+      meal('2026-09-06', 'dinner', 26, 'Thai Basil Chicken'),
+      meal('2026-09-06', 'lunch', 35, 'Chicken Caesar Salad'),
+      meal('2026-09-06', 'supper', 1, 'Meatloaf Recipe'),
+    ],
+  });
+
+  fireEvent.press(screen.getByLabelText('Move dinner on 2026-09-07 earlier'));
+
+  await waitFor(() => expect(callsTo('PATCH', '/planner/plans/2/items')).toHaveLength(1));
+  expect(callsTo('PATCH', '/planner/plans/2/items')[0].data).toEqual({
+    moves: [{ item_id: 1, date: '2026-09-06', meal_type: 'dinner' }],
+  });
+});
+
+test('the target day is the plan\'s previous day, not yesterday', async () => {
+  // A plan covering Mon/Wed/Fri must move Wednesday's meal to Monday, not to a
+  // Tuesday the plan never included.
+  route('GET', '/planner/current', {});
+  route('GET', PLANS_LIST, [SUMMARY]);
+  route('GET', '/planner/plans/2', {
+    ...PLAN,
+    items: [
+      meal('2026-09-06', 'dinner', 26, 'Thai Basil Chicken'),
+      meal('2026-09-09', 'dinner', 1, 'Meatloaf Recipe'),
+    ],
+  });
+  route('PATCH', '/planner/plans/2/items', PLAN);
+
+  renderInApp(<PlannerNavigator />);
+  fireEvent.press(await screen.findByLabelText('Saved plans'));
+  fireEvent.press(await screen.findByLabelText(/Meal plan, Sunday 6/));
+  await waitFor(() => expect(screen.getByText('Meatloaf Recipe')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('Move dinner on 2026-09-09 earlier'));
+
+  await waitFor(() => expect(callsTo('PATCH', '/planner/plans/2/items')).toHaveLength(1));
+  expect(callsTo('PATCH', '/planner/plans/2/items')[0].data.moves[0].date).toBe('2026-09-06');
+});
+
+test('the screen takes the server\'s version of the plan, including a swap', async () => {
+  // The server may have swapped with whatever occupied the target slot. Patching
+  // one item locally would show a plan the server does not have.
+  await openPlan();
+  route('PATCH', '/planner/plans/2/items', {
+    ...PLAN,
+    items: [
+      meal('2026-09-07', 'dinner', 26, 'Thai Basil Chicken'),
+      meal('2026-09-06', 'lunch', 35, 'Chicken Caesar Salad'),
+      meal('2026-09-06', 'dinner', 1, 'Meatloaf Recipe'),
+    ],
+  });
+
+  fireEvent.press(screen.getByLabelText('Move dinner on 2026-09-07 earlier'));
+
+  await waitFor(() =>
+    expect(screen.getByLabelText('Move dinner on 2026-09-06 later')).toBeTruthy(),
+  );
+  // Meatloaf moved to the 6th and Thai Basil was displaced to the 7th.
+  expect(screen.getByLabelText('Move dinner on 2026-09-07 earlier')).toBeTruthy();
+});
+
+test('the first day cannot move earlier and the last cannot move later', async () => {
+  await openPlan();
+
+  expect(screen.getByLabelText('Move dinner on 2026-09-06 earlier').props.accessibilityState)
+    .toMatchObject({ disabled: true });
+  expect(screen.getByLabelText('Move dinner on 2026-09-07 later').props.accessibilityState)
+    .toMatchObject({ disabled: true });
+});
+
+test('a failed move keeps the plan on screen', async () => {
+  await openPlan();
+  route('PATCH', '/planner/plans/2/items', httpError(409, 'Two meals cannot be moved to the same day and meal type'));
+
+  fireEvent.press(screen.getByLabelText('Move dinner on 2026-09-07 earlier'));
+
+  await waitFor(() =>
+    expect(screen.getByText(/Two meals cannot be moved/)).toBeTruthy(),
+  );
+  // Losing the plan on a failed move would be worse than the failure.
+  expect(screen.getByText('Meatloaf Recipe')).toBeTruthy();
+});

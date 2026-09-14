@@ -14,7 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import PlanDays, { dayLabel } from '../../components/PlanDays';
 import { PlannerStackParamList } from '../../navigation/types';
-import { Plan, deletePlan, getPlan } from '../../services/plans';
+import { Plan, PlanItem, deletePlan, getPlan, movePlanItems } from '../../services/plans';
 
 type Props = NativeStackScreenProps<PlannerStackParamList, 'SavedPlan'>;
 
@@ -23,6 +23,7 @@ const SavedPlanScreen = ({ navigation, route }: Props) => {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [movingItemId, setMovingItemId] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,6 +67,45 @@ const SavedPlanScreen = ({ navigation, route }: Props) => {
     );
   };
 
+  /**
+   * Move one meal to the previous or next day the plan already covers.
+   *
+   * The target day comes from the plan's own sorted days rather than calendar
+   * arithmetic, so a plan covering Mon/Wed/Fri moves Wed's dinner to Mon
+   * instead of to an empty Tuesday it never included.
+   *
+   * The response replaces local state wholesale: the server may have SWAPPED
+   * with whatever occupied the target slot, and recomputed start_date, so
+   * patching one item locally would show a plan the server does not have.
+   */
+  const moveMeal = useCallback(
+    async (item: PlanItem, direction: 'earlier' | 'later') => {
+      if (!plan) return;
+      const days = [...new Set(plan.items.map((i) => i.date))].sort();
+      const index = days.indexOf(item.date);
+      const target = days[direction === 'earlier' ? index - 1 : index + 1];
+      // The arrows are disabled at the ends; this guards a race, not a tap.
+      if (!target) return;
+
+      setMovingItemId(item.id);
+      setError(null);
+      try {
+        setPlan(
+          await movePlanItems(plan.id, [
+            { item_id: item.id, date: target, meal_type: item.meal_type },
+          ]),
+        );
+      } catch (err: any) {
+        setError(
+          err?.response?.data?.detail || err?.message || 'Could not move that meal.',
+        );
+      } finally {
+        setMovingItemId(null);
+      }
+    },
+    [plan],
+  );
+
   const span = plan?.items.length
     ? (() => {
         const dates = plan.items.map((i) => i.date).sort();
@@ -105,6 +145,8 @@ const SavedPlanScreen = ({ navigation, route }: Props) => {
           {plan ? (
             <PlanDays
               items={plan.items}
+              onMoveMeal={moveMeal}
+              movingItemId={movingItemId}
               onPressMeal={(meal) =>
                 navigation.getParent()?.navigate('RecipesTab', {
                   screen: 'RecipeDetail',
