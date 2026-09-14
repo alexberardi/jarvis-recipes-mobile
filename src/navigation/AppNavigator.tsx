@@ -43,15 +43,19 @@ const AppNavigator = () => {
         ),
       })}
     >
-      <Tab.Screen
-        name="RecipesTab"
-        component={RecipesNavigator}
-        options={{ title: 'Recipes' }}
-      />
+      {/* Planner first: "what are we eating" is the question this app gets
+          opened to answer. Recipes and groceries are what you do BECAUSE of the
+          plan, so they follow it. The first tab is also the landing screen, so
+          this order decides what you see on launch. */}
       <Tab.Screen
         name="PlannerTab"
         component={PlannerNavigator}
         options={{ title: 'Planner' }}
+      />
+      <Tab.Screen
+        name="RecipesTab"
+        component={RecipesNavigator}
+        options={{ title: 'Recipes' }}
       />
       <Tab.Screen
         name="GroceriesTab"
