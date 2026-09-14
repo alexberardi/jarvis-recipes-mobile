@@ -27,11 +27,14 @@ import {
 jest.mock('../../src/api/recipesApi', () => require('./fakeApi').recipesApiMock());
 jest.mock('../../src/api/authApi', () => require('./fakeApi').authApiMock());
 
-/** The recipes tab lands first, so its fetches have to be answered. */
+/** Answers the fetches both landing tabs make, so a failure points at auth. */
 const stubRecipesTab = () => {
   route('GET', '/recipes/parse-url/jobs', { jobs: [] });
   route('GET', /^\/recipes$/, [apiRecipe()]);
   route('GET', '/tags', []);
+  // Planner is the landing tab, so signing in mounts it -- without these it
+  // renders its error path and the test's failure points at the wrong screen.
+  route('GET', '/planner/current', {});
 };
 
 beforeEach(async () => {
@@ -68,10 +71,15 @@ test('logging in replaces the auth stack with the app', async () => {
 
   // The tab bar only exists on the authenticated side of RootNavigator.
   await waitFor(() => expect(screen.getByText('Planner')).toBeTruthy());
-  // Waited for, not asserted synchronously: the tab bar appears the moment
-  // `isAuthenticated` flips, while the recipe list is still fetching. Locally it
-  // had usually resolved by now; under CI's slower, coverage-instrumented run it
-  // had not, and this failed there while passing here.
+  // Planner is the first tab, so it is what you land on: "what are we eating"
+  // is the question the app gets opened to answer.
+  await waitFor(() => expect(screen.getByText('Plan the week')).toBeTruthy());
+
+  // The recipes tab is still reachable, and still loads.
+  fireEvent.press(screen.getByText('Recipes'));
+  // Waited for, not asserted synchronously: the tab mounts before its list has
+  // fetched. Under CI's slower, coverage-instrumented run it had not resolved,
+  // and this failed there while passing locally.
   await waitFor(() => expect(screen.getByText('Beef Stroganoff')).toBeTruthy());
 });
 
