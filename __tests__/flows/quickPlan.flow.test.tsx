@@ -106,7 +106,7 @@ test('re-rolling one meal sends every id currently on screen', async () => {
   expect(screen.getByText('Keep This')).toBeTruthy();
 });
 
-test('a re-roll all excludes the whole current plan, so it genuinely changes', async () => {
+test('re-rolling with nothing locked excludes the whole current plan, so it genuinely changes', async () => {
   const week = upcomingDates(7);
   route('POST', '/meal-plans/random', ({ data }) =>
     // Second call is the re-roll; answer with different recipes so the screen
@@ -120,7 +120,7 @@ test('a re-roll all excludes the whole current plan, so it genuinely changes', a
   await plan();
   await waitFor(() => expect(screen.getByText('First Try')).toBeTruthy());
 
-  fireEvent.press(screen.getByText('Re-roll all'));
+  fireEvent.press(screen.getByText('Re-roll unlocked'));
 
   await waitFor(() => expect(screen.getByText('Second Try')).toBeTruthy());
   expect(lastCallTo('POST', '/meal-plans/random')!.data.exclude_recipe_ids).toEqual([4]);
@@ -293,7 +293,7 @@ test('a failed save keeps the plan on screen to retry', async () => {
 /**
  * Locking a meal.
  *
- * "Re-roll all" regenerates the week server-side, so a locked meal has to be
+ * "Re-roll unlocked" regenerates the week server-side, so a locked meal has to be
  * kept OUT of the request and stitched back in afterwards. Asking for every
  * slot and discarding the ones that came back would spend recipes on meals it
  * then throws away, making the unlocked days more likely to repeat.
@@ -302,7 +302,7 @@ const lock = async (label: RegExp) => {
   fireEvent.press(await screen.findByLabelText(label));
 };
 
-test('re-roll all does not ask for a locked meal', async () => {
+test('re-rolling does not ask for a locked meal', async () => {
   const week = upcomingDates(7);
   route('GET', '/planner/current', {});
   route('POST', '/meal-plans/random', {
@@ -324,7 +324,7 @@ test('re-roll all does not ask for a locked meal', async () => {
     slots: [randomSlot({ date: week[1], recipe_id: 11, title: 'Chicken Fried Rice' })],
     incomplete: false,
   });
-  fireEvent.press(screen.getByText('Re-roll all'));
+  fireEvent.press(screen.getByText('Re-roll unlocked'));
 
   await waitFor(() => expect(screen.getByText('Chicken Fried Rice')).toBeTruthy());
 
@@ -336,7 +336,7 @@ test('re-roll all does not ask for a locked meal', async () => {
   expect(lastCallTo('POST', '/meal-plans/random')!.data.exclude_recipe_ids).toContain(4);
 });
 
-test('a locked meal survives re-roll all', async () => {
+test('a locked meal survives a re-roll', async () => {
   const week = upcomingDates(7);
   route('GET', '/planner/current', {});
   route('POST', '/meal-plans/random', {
@@ -356,7 +356,7 @@ test('a locked meal survives re-roll all', async () => {
     slots: [randomSlot({ date: week[1], recipe_id: 11, title: 'Chicken Fried Rice' })],
     incomplete: false,
   });
-  fireEvent.press(screen.getByText('Re-roll all'));
+  fireEvent.press(screen.getByText('Re-roll unlocked'));
 
   await waitFor(() => expect(screen.getByText('Chicken Fried Rice')).toBeTruthy());
   expect(screen.getByText('Tacos')).toBeTruthy();
@@ -364,7 +364,7 @@ test('a locked meal survives re-roll all', async () => {
 });
 
 test('locking every meal refuses rather than sending an empty request', async () => {
-  // Narrowed to one day on purpose: "re-roll all" re-requests the PICKER's
+  // Narrowed to one day on purpose: "Re-roll unlocked" re-requests the PICKER's
   // selection, not just the slots on screen, so with seven days selected and
   // one slot returned there is always something left unlocked to re-roll.
   const week = upcomingDates(7);
@@ -387,7 +387,7 @@ test('locking every meal refuses rather than sending an empty request', async ()
   await lock(new RegExp(`Lock dinner on ${week[0]}`));
 
   const before = lastCallTo('POST', '/meal-plans/random');
-  fireEvent.press(screen.getByText('Re-roll all'));
+  fireEvent.press(screen.getByText('Re-roll unlocked'));
 
   await waitFor(() => expect(screen.getByText(/Every meal is locked/i)).toBeTruthy());
   expect(lastCallTo('POST', '/meal-plans/random')).toBe(before);
