@@ -14,6 +14,8 @@ import {
   Appbar,
   Button,
   Icon,
+  List,
+  Snackbar,
   Chip,
   Divider,
   HelperText,
@@ -23,9 +25,17 @@ import {
 } from 'react-native-paper';
 
 import { GroceriesStackParamList } from '../../navigation/types';
-import { Cart, ShoppingList, buildCart, formatAmounts, getShoppingList } from '../../services/grocery';
+import {
+  Cart,
+  ShoppingItem,
+  ShoppingList,
+  buildCart,
+  formatAmounts,
+  getShoppingList,
+} from '../../services/grocery';
 import { PRESET_LABELS, RangePreset, rangeFor } from './dateRange';
 import { useCheckedItems } from './useCheckedItems';
+import { Staple, addStaple, getStaples, removeStaple } from '../../services/staples';
 
 type Props = NativeStackScreenProps<GroceriesStackParamList, 'ShoppingList'>;
 
@@ -38,6 +48,8 @@ const ShoppingListScreen = ({ navigation }: Props) => {
 
   const [list, setList] = useState<ShoppingList | null>(null);
   const [cart, setCart] = useState<Cart | null>(null);
+  const [staples, setStaples] = useState<Staple[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +58,15 @@ const ShoppingListScreen = ({ navigation }: Props) => {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setList(await getShoppingList(start, end));
+      const [fetched, itsStaples] = await Promise.all([
+        getShoppingList(start, end),
+        // Fetched for their ids: the list says WHICH rows are staples, but
+        // un-marking one needs the id, which only this endpoint carries. A
+        // failure here must not cost the list, so it falls back to none.
+        getStaples().catch(() => [] as Staple[]),
+      ]);
+      setList(fetched);
+      setStaples(itsStaples);
       // The previous range's cart is meaningless here, and leaving the export
       // button showing a stale link is worse than showing none.
       setCart(null);
@@ -65,6 +85,60 @@ const ShoppingListScreen = ({ navigation }: Props) => {
     }, [load]),
   );
 
+  const renderRow = (item: ShoppingItem) => {
+    const isChecked = Boolean(checked[item.name]);
+    const amounts = formatAmounts(item);
+    const isStaple = Boolean(item.is_staple);
+    return (
+      <TouchableRipple
+        key={item.name}
+        onPress={() => toggle(item.name)}
+        // Long-press rather than another visible control: the row already has a
+        // tap action and a trash icon, and a third target would crowd a line
+        // read while holding a trolley. Discoverability comes from the hint
+        // shown under the header while no staples exist yet.
+        onLongPress={() => toggleStaple(item.name)}
+        delayLongPress={400}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: isChecked }}
+        accessibilityLabel={amounts ? `${item.name}, ${amounts}` : item.name}
+        accessibilityHint={
+          isStaple
+            ? 'Double tap and hold to stop treating this as a staple'
+            : 'Double tap and hold to mark this as a staple you always have'
+        }
+      >
+        <View style={styles.item}>
+          <View style={styles.itemText}>
+            <Text variant="bodyLarge" style={isChecked ? styles.itemDone : undefined}>
+              {item.name}
+            </Text>
+            {amounts ? (
+              <Text
+                variant="bodySmall"
+                style={[
+                  { color: theme.colors.onSurfaceVariant },
+                  isChecked ? styles.itemDone : undefined,
+                ]}
+              >
+                {amounts}
+                {item.recipes.length ? ` · ${item.recipes.join(', ')}` : ''}
+              </Text>
+            ) : null}
+          </View>
+          {/* A plain Icon, not an IconButton: the whole row is already the
+              pressable and carries the checkbox role, so a nested button would
+              add a second overlapping hit target and a second thing for a
+              screen reader to land on. The trash still responds because it sits
+              inside the row's target. */}
+          <View testID={`grocery-remove-${item.name}`}>
+            <Icon source="trash-can-outline" size={22} color={theme.colors.onSurfaceVariant} />
+          </View>
+        </View>
+      </TouchableRipple>
+    );
+  };
+
   const exportCart = async () => {
     setExporting(true);
     setError(null);
@@ -79,7 +153,30 @@ const ShoppingListScreen = ({ navigation }: Props) => {
     }
   };
 
-  const remaining = (list?.items ?? []).filter((i) => !checked[i.name]).length;
+  // Staples are grouped away rather than hidden, and they do not count towards
+  // "N to buy" -- that number is what is left to put in the trolley.
+  const items = list?.items ?? [];
+  const toShop = items.filter((i) => !i.is_staple);
+  const stapleItems = items.filter((i) => i.is_staple);
+  const remaining = toShop.filter((i) => !checked[i.name]).length;
+
+  const toggleStaple = async (name: string) => {
+    const existing = staples.find((s) => s.name === name);
+    try {
+      if (existing) {
+        await removeStaple(existing.id);
+        setNotice(`${name} is back on the list`);
+      } else {
+        await addStaple(name);
+        setNotice(`${name} saved as a staple`);
+      }
+      // Reload rather than patch local state: is_staple is the server's answer,
+      // and a housemate may have changed it too.
+      await load();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Could not update your staples.');
+    }
+  };
   const guessed = (cart?.items ?? []).filter((i) => i.source === 'llm');
 
   return (
@@ -150,60 +247,32 @@ const ShoppingListScreen = ({ navigation }: Props) => {
               </Text>
             </View>
 
-            {/* A hand-built row rather than Checkbox.Item: that takes a single
-                label, and an amount crammed into it truncates -- a list that
-                says "chicken breast" without "1.5 lb" is not a shopping list.
-                It also marks its label subtree no-hide-descendants, which puts
-                the text out of reach of anything reading the screen. */}
-            {list.items.map((item) => {
-              const isChecked = Boolean(checked[item.name]);
-              const amounts = formatAmounts(item);
-              return (
-                <TouchableRipple
-                  key={item.name}
-                  onPress={() => toggle(item.name)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isChecked }}
-                  accessibilityLabel={amounts ? `${item.name}, ${amounts}` : item.name}
-                >
-                  <View style={styles.item}>
-                    <View style={styles.itemText}>
-                      <Text
-                        variant="bodyLarge"
-                        style={isChecked ? styles.itemDone : undefined}
-                      >
-                        {item.name}
-                      </Text>
-                      {amounts ? (
-                        <Text
-                          variant="bodySmall"
-                          style={[
-                            { color: theme.colors.onSurfaceVariant },
-                            isChecked ? styles.itemDone : undefined,
-                          ]}
-                        >
-                          {amounts}
-                          {item.recipes.length ? ` · ${item.recipes.join(', ')}` : ''}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {/* A plain Icon, not an IconButton: the whole row is
-                        already the pressable and carries the checkbox role,
-                        so a nested button would add a second overlapping hit
-                        target and a second thing for a screen reader to land
-                        on. The trash still responds because it sits inside
-                        the row's target. */}
-                    <View testID={`grocery-remove-${item.name}`}>
-                      <Icon
-                        source="trash-can-outline"
-                        size={22}
-                        color={theme.colors.onSurfaceVariant}
-                      />
-                    </View>
-                  </View>
-                </TouchableRipple>
-              );
-            })}
+            {/* Only what is actually being bought. Staples live in their own
+                collapsed section below -- present, because a cook needs to know
+                the recipe wants salt, but out of the way of the trolley run. */}
+            {toShop.map(renderRow)}
+
+            {stapleItems.length === 0 && toShop.length > 0 ? (
+              <Text
+                variant="bodySmall"
+                style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                Hold an item you always have in to make it a staple.
+              </Text>
+            ) : null}
+
+            {stapleItems.length > 0 ? (
+              // Collapsed by default: the point is to get these out of the way.
+              // Hold one again to put it back on the list proper.
+              <List.Accordion
+                title={`Staples (${stapleItems.length})`}
+                titleStyle={{ color: theme.colors.onSurfaceVariant }}
+                style={{ backgroundColor: 'transparent', paddingLeft: 0 }}
+                testID="staples-section"
+              >
+                {stapleItems.map(renderRow)}
+              </List.Accordion>
+            ) : null}
 
             <Divider style={styles.spacer} />
             <Button
@@ -287,6 +356,17 @@ const ShoppingListScreen = ({ navigation }: Props) => {
           </>
         )}
       </ScrollView>
+
+      {/* Confirms a long-press landed. Without it the only feedback is a row
+          quietly moving into a collapsed section, which reads as the item
+          having vanished. */}
+      <Snackbar
+        visible={notice !== null}
+        onDismiss={() => setNotice(null)}
+        duration={2500}
+      >
+        {notice ?? ''}
+      </Snackbar>
     </>
   );
 };
@@ -309,6 +389,7 @@ const styles = StyleSheet.create({
   // flex so a long ingredient wraps instead of pushing the row off screen.
   itemText: { flex: 1, paddingVertical: 6 },
   itemDone: { textDecorationLine: 'line-through', opacity: 0.5 },
+  hint: { marginTop: 8, fontStyle: 'italic' },
   cartSummary: { marginTop: 16, gap: 8 },
   guessHeading: { marginTop: 8 },
   unmatched: { marginTop: 4 },
