@@ -316,7 +316,7 @@ test('expanding the staples section shows what is in it', async () => {
   await waitFor(() => expect(screen.getByText('salt')).toBeTruthy());
 });
 
-test('holding an item marks it as a staple', async () => {
+test('the basket button marks an item as a staple', async () => {
   route('GET', '/staples', []);
   route('GET', '/shopping-list', listOf(item('olive oil', 2, 'tbsp')));
   route('POST', '/staples', { id: 9, name: 'olive oil' });
@@ -324,14 +324,16 @@ test('holding an item marks it as a staple', async () => {
   renderInApp(<GroceriesNavigator />);
   await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
 
-  fireEvent(screen.getByLabelText('olive oil, 2 tbsp'), 'longPress');
+  // An explicit control, not a gesture: the first version only had a
+  // long-press and it was undiscoverable in real use.
+  fireEvent.press(screen.getByTestId('grocery-staple-olive oil'));
 
   await waitFor(() => expect(lastCallTo('POST', '/staples')).toBeTruthy());
   // The NAME is what the server keys on -- it normalises, this client must not.
   expect(lastCallTo('POST', '/staples')?.data).toEqual({ name: 'olive oil' });
 });
 
-test('holding a staple puts it back on the list', async () => {
+test('the cart button puts a staple back on the list', async () => {
   route('GET', '/staples', [{ id: 7, name: 'salt' }]);
   route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), staple('salt')));
   route('DELETE', '/staples/7', undefined);
@@ -341,7 +343,7 @@ test('holding a staple puts it back on the list', async () => {
   fireEvent.press(screen.getByText('Staples (1)'));
   await waitFor(() => expect(screen.getByText('salt')).toBeTruthy());
 
-  fireEvent(screen.getByLabelText('salt, 1 tsp'), 'longPress');
+  fireEvent.press(screen.getByTestId('grocery-staple-salt'));
 
   // Removal needs the id, which only GET /staples carries -- the list row has
   // just a name. This is why the screen fetches both.
@@ -354,8 +356,8 @@ test('the hint appears only while nothing is a staple yet', async () => {
 
   renderInApp(<GroceriesNavigator />);
   await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
-  // Long-press is invisible without it.
-  expect(screen.getByText(/Hold an item you always have in/)).toBeTruthy();
+  // Names the control rather than describing an invisible gesture.
+  expect(screen.getByTestId('staples-hint')).toBeTruthy();
 });
 
 test('the hint is gone once there is a staple', async () => {
@@ -364,7 +366,7 @@ test('the hint is gone once there is a staple', async () => {
 
   renderInApp(<GroceriesNavigator />);
   await waitFor(() => expect(screen.getByText('Staples (1)')).toBeTruthy());
-  expect(screen.queryByText(/Hold an item you always have in/)).toBeNull();
+  expect(screen.queryByTestId('staples-hint')).toBeNull();
 });
 
 test('a failed staples fetch still renders the list', async () => {
@@ -379,4 +381,45 @@ test('a failed staples fetch still renders the list', async () => {
 
   await waitFor(() => expect(screen.getByText('ground beef')).toBeTruthy());
   expect(screen.getByText('1 to buy')).toBeTruthy();
+});
+
+test('the icon shows what the next press does, not what happened', async () => {
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+
+  // Not yet in the trolley: pressing removes it from the list.
+  expect(screen.getByTestId('grocery-remove-ground beef')).toBeTruthy();
+  expect(screen.queryByTestId('grocery-restore-ground beef')).toBeNull();
+
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+
+  // Ticked: pressing again puts it back, so a trash can would be a lie.
+  await waitFor(() => expect(screen.getByTestId('grocery-restore-ground beef')).toBeTruthy());
+  expect(screen.queryByTestId('grocery-remove-ground beef')).toBeNull();
+});
+
+test('clearing ticks says so and can be undone', async () => {
+  // The icon used to be two stacked squares, which reads as COPY -- it was
+  // pressed expecting a copied list and silently wiped a shop's worth of ticks.
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), item('rice', 2, 'cups')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('2 to buy')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('Clear ticks'));
+
+  await waitFor(() => expect(screen.getByText('Ticks cleared')).toBeTruthy());
+  expect(screen.getByText('2 to buy')).toBeTruthy();
+
+  fireEvent.press(screen.getByText('Undo'));
+
+  // The shop is back where it was, not restarted.
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
 });
