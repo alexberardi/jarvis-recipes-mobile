@@ -57,5 +57,14 @@ export const useCheckedItems = (start: string, end: string) => {
     AsyncStorage.removeItem(key(start, end)).catch(() => {});
   }, [start, end]);
 
-  return { checked, ready, toggle, clear };
+  /** Put back a snapshot -- what Undo on "ticks cleared" restores. */
+  const restore = useCallback(
+    (snapshot: Record<string, boolean>) => {
+      setChecked(snapshot);
+      AsyncStorage.setItem(key(start, end), JSON.stringify(snapshot)).catch(() => {});
+    },
+    [start, end],
+  );
+
+  return { checked, ready, toggle, clear, restore };
 };

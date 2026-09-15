@@ -298,3 +298,38 @@ test('a failed move keeps the plan on screen', async () => {
   // Losing the plan on a failed move would be worse than the failure.
   expect(screen.getByText('Meatloaf Recipe')).toBeTruthy();
 });
+
+// ── drilling into a planned meal ──────────────────────────────────────────────
+//
+// This covers the drill-in WORKING: the recipe renders and Back returns to the
+// plan. It does NOT prove the tab-jump fix, and an earlier version of this
+// comment wrongly claimed it did -- reinstating
+// getParent().navigate('RecipesTab', ...) leaves it green, because once
+// RecipeDetail is mounted in this stack both versions render it, and bottom tabs
+// keep their screens mounted so "which tab is in front" is invisible to queries.
+// __tests__/navigation/PlannerDrillIn.test.ts pins that part.
+
+test('a planned meal opens over the plan, and Back returns to it', async () => {
+  route('GET', '/planner/current', PLAN);
+  route('GET', /^\/recipes\/26$/, {
+    id: 26,
+    title: 'Thai Basil Chicken',
+    ingredients: [{ id: 1, text: 'chicken', quantity_display: '1 lb', unit: 'lb' }],
+    steps: [{ id: 1, step_number: 1, text: 'Fry it.' }],
+    tags: [],
+  });
+
+  renderInApp(<PlannerNavigator />);
+  await waitFor(() => expect(screen.getByText('Thai Basil Chicken')).toBeTruthy());
+
+  fireEvent.press(screen.getByText('Thai Basil Chicken'));
+
+  // The recipe itself: its step text is on screen, which the plan never shows.
+  await waitFor(() => expect(screen.getByText('Fry it.')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('Back'));
+
+  // Back to the PLAN -- the other two meals are visible again.
+  await waitFor(() => expect(screen.getByText('Meatloaf Recipe')).toBeTruthy());
+  expect(screen.queryByText('Fry it.')).toBeNull();
+});

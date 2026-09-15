@@ -476,9 +476,9 @@ const MealPlanResultsScreen = ({ navigation, route }: Props) => {
                                   // Carry the source: a staged pick's id is a
                                   // stage_recipes UUID, which /recipes/{id}
                                   // cannot parse.
-                                  navigation.getParent()?.navigate('RecipesTab', {
-                                    screen: 'RecipeDetail',
-                                    params: { id: rec.id, source: selection.source },
+                                  navigation.navigate('RecipeDetail', {
+                                    id: rec.id,
+                                    source: selection.source,
                                   });
                                 }
                               } catch (error) {

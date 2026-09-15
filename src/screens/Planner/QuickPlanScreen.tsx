@@ -319,10 +319,9 @@ const QuickPlanScreen = ({ navigation }: Props) => {
             <PlanDays
               items={saved.items}
               onPressMeal={(meal) =>
-                navigation.getParent()?.navigate('RecipesTab', {
-                  screen: 'RecipeDetail',
-                  params: { id: meal.recipe_id },
-                })
+                // Within THIS stack, not via the Recipes tab: Back must come
+                // back to the week you were looking at.
+                navigation.navigate('RecipeDetail', { id: meal.recipe_id })
               }
             />
             <Divider style={styles.savedDivider} />
