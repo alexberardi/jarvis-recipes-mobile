@@ -83,13 +83,32 @@ const RecipeDetailScreen = ({ route, navigation }: Props) => {
           </List.Section>
 
           <List.Section title="Steps">
+            {/* Hand-built rather than List.Item: its `description` clamps to
+                descriptionNumberOfLines, which defaults to 2, so more than half
+                of every recipe's steps were ellipsized on screen -- 143 of 264
+                in the dev database, the worst hiding 206 of its 282 characters.
+                A recipe step is the content, not a list subtitle, so it gets a
+                Text that wraps. (Ingredients hit the same wall earlier and were
+                patched with titleNumberOfLines={2}; they top out at 60
+                characters, so that one holds.) */}
             {recipe.steps.map((step) => (
-              <List.Item
+              <View
                 key={step.id}
-                title={`Step ${step.step_number}`}
-                description={step.text}
-                left={(props) => <List.Icon {...props} icon="numeric" />}
-              />
+                style={styles.step}
+                accessible
+                accessibilityLabel={`Step ${step.step_number}. ${step.text}`}
+              >
+                <Text variant="labelLarge" style={styles.stepNumber}>
+                  {step.step_number}
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={styles.stepText}
+                  testID={`step-text-${step.step_number}`}
+                >
+                  {step.text}
+                </Text>
+              </View>
             ))}
           </List.Section>
         </ScrollView>
@@ -99,6 +118,17 @@ const RecipeDetailScreen = ({ route, navigation }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  step: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  // Fixed width so the numbers form a column and the text lines up under
+  // itself rather than stepping in and out as 9 becomes 10.
+  stepNumber: { width: 20, textAlign: 'right', opacity: 0.6 },
+  // flex so a long step wraps instead of being clipped -- the whole point.
+  stepText: { flex: 1 },
   container: {
     padding: 16,
     gap: 16,
