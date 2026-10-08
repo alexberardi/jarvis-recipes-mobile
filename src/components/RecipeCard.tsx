@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card, Chip, Text, useTheme } from 'react-native-paper';
 
 import { Recipe } from '../types/Recipe';
+import { resolveRecipeImageUrl } from '../utils/mediaUrl';
 
 type Props = {
   recipe: Recipe;
@@ -13,13 +14,14 @@ const RecipeCard = ({ recipe, onPress }: Props) => {
   const chipBg = theme.colors.surfaceVariant;
   const chipBorder = theme.colors.outlineVariant;
   const descriptionColor = theme.colors.onSurfaceVariant;
+  const imageUri = resolveRecipeImageUrl(recipe.image_url);
 
   return (
     <Card style={styles.card} onPress={onPress} mode="elevated">
     <Card.Cover
       source={
-        recipe.image_url
-          ? { uri: recipe.image_url }
+        imageUri
+          ? { uri: imageUri }
           : require('../../assets/recipes/placeholder.png')
       }
       style={styles.cover}

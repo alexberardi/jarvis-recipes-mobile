@@ -8,11 +8,13 @@ import LoadingIndicator from '../../components/LoadingIndicator';
 import { useRecipe } from '../../hooks/useRecipes';
 import { RecipesStackParamList } from '../../navigation/types';
 import { formatIngredient } from '../../utils/formatIngredient';
+import { resolveRecipeImageUrl } from '../../utils/mediaUrl';
 
 type Props = NativeStackScreenProps<RecipesStackParamList, 'RecipeDetail'>;
 
 const RecipeDetailScreen = ({ route, navigation }: Props) => {
   const { data: recipe, isLoading, refetch } = useRecipe(route.params.id, route.params.source);
+  const imageUri = resolveRecipeImageUrl(recipe?.image_url);
 
   // Refetch recipe data when screen comes into focus (e.g., after editing)
   useFocusEffect(
@@ -46,8 +48,8 @@ const RecipeDetailScreen = ({ route, navigation }: Props) => {
             <View style={styles.cardContent}>
               <Card.Cover
                 source={
-                  recipe.image_url
-                    ? { uri: recipe.image_url }
+                  imageUri
+                    ? { uri: imageUri }
                     : require('../../../assets/recipes/placeholder.png')
                 }
               />
