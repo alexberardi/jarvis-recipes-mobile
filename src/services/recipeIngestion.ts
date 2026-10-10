@@ -1,7 +1,7 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { recipesRequest } from '../api/recipesApi';
 import { MailboxMessage } from '../types/RecipeIngestion';
-import { pollWithBackoff } from './jobPolling';
+import { pollWithBackoff, IMPORT_POLL_TIMEOUT_MS } from './jobPolling';
 
 export type LocalImage = {
   uri: string;
@@ -107,7 +107,7 @@ export const waitForIngestionMessage = async (
       payload?.status === 'ERROR' ||
       payload?.type === 'recipe_image_ingestion_completed' ||
       payload?.type === 'recipe_image_ingestion_failed',
-    { timeoutMs: options.timeoutMs ?? 90_000, signal: options.signal },
+    { timeoutMs: options.timeoutMs ?? IMPORT_POLL_TIMEOUT_MS, signal: options.signal },
   );
 
 // TODO: add tests for waitForIngestionMessage behavior and max image validation.

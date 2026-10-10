@@ -39,6 +39,21 @@ export const clearActiveJob = async () => {
 
 export const backoffScheduleMs = [1000, 2000, 3000];
 
+/**
+ * How long an import may stay un-terminal before the client gives up.
+ *
+ * Must outlast the server's OCR join. jarvis-recipes-server fans each image out
+ * to every configured OCR host and waits OCR_JOIN_TIMEOUT_SECONDS (90s) for all
+ * of them before continuing with whatever readings arrived — and only *then*
+ * runs the LLM structuring pass. So when one host is down, the server does the
+ * real work strictly after the 90s mark. A 90s client budget expired at exactly
+ * that moment, which meant a degraded-but-successful import (the case the join
+ * deadline exists to serve) always surfaced as "We could not extract a recipe
+ * from these images", even with a finished draft sitting in the database.
+ * Retrying could not help: a new job restarted the same race.
+ */
+export const IMPORT_POLL_TIMEOUT_MS = 180_000;
+
 export const pollWithBackoff = async <T>(
   fn: () => Promise<T>,
   isTerminal: (payload: T) => boolean,
