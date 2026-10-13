@@ -258,3 +258,168 @@ describe('exporting to Walmart', () => {
     expect(screen.getByText('ground beef')).toBeTruthy();
   });
 });
+
+test('each item carries a trash affordance, not a checkbox', async () => {
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), item('rice', 2, 'cups')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('2 to buy')).toBeTruthy());
+
+  // The control is a trash can on the right, not a checkbox on the left:
+  // "take it off my list" is what the tap means to someone in a shop. Nothing
+  // else in this file would notice the affordance changing back, because the
+  // press goes through the row's label either way.
+  expect(screen.getByTestId('grocery-remove-ground beef')).toBeTruthy();
+  expect(screen.getByTestId('grocery-remove-rice')).toBeTruthy();
+
+  // And it is still the whole row that toggles, so the trash is reachable by
+  // tapping anywhere on the line -- the hit target a checkbox used to give.
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+});
+
+// ── staples ───────────────────────────────────────────────────────────────────
+//
+// The server flags a row as a staple rather than hiding it, because a cook needs
+// to know the recipe wants salt. Grouping it away is this screen's job, so these
+// tests are about the grouping, the count, and the long-press that sets it.
+
+// A real amount, so the row's accessibility label is the plain
+// "name, amount" form rather than item()'s null-quantity "to taste" case.
+const staple = (name: string) => ({ ...item(name, 1, 'tsp'), is_staple: true });
+
+test('a staple is grouped out of the list and out of the count', async () => {
+  route('GET', '/staples', [{ id: 7, name: 'salt' }]);
+  route('GET', '/shopping-list', {
+    ...listOf(item('ground beef', 1, 'lb'), staple('salt')),
+  });
+
+  renderInApp(<GroceriesNavigator />);
+
+  // One thing to buy, not two: the count is what is left for the trolley.
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+  expect(screen.getByText('Staples (1)')).toBeTruthy();
+  // Collapsed, so the row itself is not on screen yet.
+  expect(screen.queryByText('salt')).toBeNull();
+  expect(screen.getByText('ground beef')).toBeTruthy();
+});
+
+test('expanding the staples section shows what is in it', async () => {
+  route('GET', '/staples', [{ id: 7, name: 'salt' }]);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), staple('salt')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('Staples (1)')).toBeTruthy());
+
+  fireEvent.press(screen.getByText('Staples (1)'));
+
+  await waitFor(() => expect(screen.getByText('salt')).toBeTruthy());
+});
+
+test('the basket button marks an item as a staple', async () => {
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('olive oil', 2, 'tbsp')));
+  route('POST', '/staples', { id: 9, name: 'olive oil' });
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+
+  // An explicit control, not a gesture: the first version only had a
+  // long-press and it was undiscoverable in real use.
+  fireEvent.press(screen.getByTestId('grocery-staple-olive oil'));
+
+  await waitFor(() => expect(lastCallTo('POST', '/staples')).toBeTruthy());
+  // The NAME is what the server keys on -- it normalises, this client must not.
+  expect(lastCallTo('POST', '/staples')?.data).toEqual({ name: 'olive oil' });
+});
+
+test('the cart button puts a staple back on the list', async () => {
+  route('GET', '/staples', [{ id: 7, name: 'salt' }]);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), staple('salt')));
+  route('DELETE', '/staples/7', undefined);
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('Staples (1)')).toBeTruthy());
+  fireEvent.press(screen.getByText('Staples (1)'));
+  await waitFor(() => expect(screen.getByText('salt')).toBeTruthy());
+
+  fireEvent.press(screen.getByTestId('grocery-staple-salt'));
+
+  // Removal needs the id, which only GET /staples carries -- the list row has
+  // just a name. This is why the screen fetches both.
+  await waitFor(() => expect(lastCallTo('DELETE', '/staples/7')).toBeTruthy());
+});
+
+test('the hint appears only while nothing is a staple yet', async () => {
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+  // Names the control rather than describing an invisible gesture.
+  expect(screen.getByTestId('staples-hint')).toBeTruthy();
+});
+
+test('the hint is gone once there is a staple', async () => {
+  route('GET', '/staples', [{ id: 7, name: 'salt' }]);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), staple('salt')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('Staples (1)')).toBeTruthy());
+  expect(screen.queryByTestId('staples-hint')).toBeNull();
+});
+
+test('a failed staples fetch still renders the list', async () => {
+  // The list is the point of the screen; staples are a refinement. Losing the
+  // refinement must not lose the list.
+  route('GET', '/staples', () => {
+    throw httpError(500, 'nope');
+  });
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb')));
+
+  renderInApp(<GroceriesNavigator />);
+
+  await waitFor(() => expect(screen.getByText('ground beef')).toBeTruthy());
+  expect(screen.getByText('1 to buy')).toBeTruthy();
+});
+
+test('the icon shows what the next press does, not what happened', async () => {
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+
+  // Not yet in the trolley: pressing removes it from the list.
+  expect(screen.getByTestId('grocery-remove-ground beef')).toBeTruthy();
+  expect(screen.queryByTestId('grocery-restore-ground beef')).toBeNull();
+
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+
+  // Ticked: pressing again puts it back, so a trash can would be a lie.
+  await waitFor(() => expect(screen.getByTestId('grocery-restore-ground beef')).toBeTruthy());
+  expect(screen.queryByTestId('grocery-remove-ground beef')).toBeNull();
+});
+
+test('clearing ticks says so and can be undone', async () => {
+  // The icon used to be two stacked squares, which reads as COPY -- it was
+  // pressed expecting a copied list and silently wiped a shop's worth of ticks.
+  route('GET', '/staples', []);
+  route('GET', '/shopping-list', listOf(item('ground beef', 1, 'lb'), item('rice', 2, 'cups')));
+
+  renderInApp(<GroceriesNavigator />);
+  await waitFor(() => expect(screen.getByText('2 to buy')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('ground beef, 1 lb'));
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+
+  fireEvent.press(screen.getByLabelText('Clear ticks'));
+
+  await waitFor(() => expect(screen.getByText('Ticks cleared')).toBeTruthy());
+  expect(screen.getByText('2 to buy')).toBeTruthy();
+
+  fireEvent.press(screen.getByText('Undo'));
+
+  // The shop is back where it was, not restarted.
+  await waitFor(() => expect(screen.getByText('1 to buy')).toBeTruthy());
+});

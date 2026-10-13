@@ -24,6 +24,15 @@ export type RecipesStackParamList = {
 
 export type PlannerStackParamList = {
   QuickPlan: undefined;
+  // Opening a meal's recipe stays INSIDE the planner stack. It used to
+  // `getParent().navigate('RecipesTab', { screen: 'RecipeDetail' })`, which
+  // switches tabs -- so Back popped the RECIPES stack and left you looking at
+  // the recipe list, having lost the plan you were reading. Same params as the
+  // Recipes stack's copy, because it is the same screen.
+  RecipeDetail: { id: number | string; source?: string };
+  // Mounted too, so Edit from that detail screen has somewhere to go; without
+  // it the button is dead in this stack.
+  CreateRecipe: any;
   /** The library of saved plans. */
   MealPlanList: undefined;
   /** One saved plan, read-only. */

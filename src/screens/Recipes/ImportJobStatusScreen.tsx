@@ -6,7 +6,12 @@ import { Appbar, Button, HelperText, Text } from 'react-native-paper';
 import LoadingIndicator from '../../components/LoadingIndicator';
 import { RecipesStackParamList } from '../../navigation/types';
 import { getParseJobStatus, cancelJob } from '../../services/parseRecipe';
-import { clearActiveJob, saveActiveJob, pollWithBackoff } from '../../services/jobPolling';
+import {
+  clearActiveJob,
+  saveActiveJob,
+  pollWithBackoff,
+  IMPORT_POLL_TIMEOUT_MS,
+} from '../../services/jobPolling';
 import { mapParsedRecipeToParams, mapRecipeDraftToParsed } from './mappers';
 import {
   trackImportCompleted,
@@ -67,7 +72,7 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
         const res = await pollWithBackoff(
           () => getParseJobStatus(jobId),
           (p) => p.status === 'COMPLETE' || p.status === 'ERROR',
-          { signal: aborter.signal, timeoutMs: 90_000 },
+          { signal: aborter.signal, timeoutMs: IMPORT_POLL_TIMEOUT_MS },
         );
         setStatus(res.status);
         if (res.status === 'COMPLETE') {

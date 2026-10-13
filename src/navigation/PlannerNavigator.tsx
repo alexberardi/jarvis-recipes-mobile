@@ -7,6 +7,8 @@ import MealPlanListScreen from '../screens/Planner/MealPlanListScreen';
 import MealPlanProgressScreen from '../screens/Planner/MealPlanProgressScreen';
 import MealPlanResultsScreen from '../screens/Planner/MealPlanResultsScreen';
 import RecipeSearchScreen from '../screens/Planner/RecipeSearchScreen';
+import CreateRecipeScreen from '../screens/Recipes/CreateRecipeScreen';
+import RecipeDetailScreen from '../screens/Recipes/RecipeDetailScreen';
 import SavedPlanScreen from '../screens/Planner/SavedPlanScreen';
 import { PlannerStackParamList } from './types';
 
@@ -25,6 +27,12 @@ const PlannerNavigator = () => (
     <Stack.Screen name="RecipeSearch" component={RecipeSearchScreen} />
     <Stack.Screen name="MealPlanProgress" component={MealPlanProgressScreen} />
     <Stack.Screen name="MealPlanResults" component={MealPlanResultsScreen} />
+    {/* The Recipes stack's screens, mounted here as well so drilling into a
+        planned meal keeps Back pointing at the plan. `as any` because both
+        components are typed against RecipesStackParamList; the ROUTE params
+        are identical, it is only the surrounding param list that differs. */}
+    <Stack.Screen name="RecipeDetail" component={RecipeDetailScreen as any} />
+    <Stack.Screen name="CreateRecipe" component={CreateRecipeScreen as any} />
   </Stack.Navigator>
 );
 

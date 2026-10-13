@@ -118,3 +118,37 @@ describe('jobPolling', () => {
     });
   });
 });
+
+describe('import poll budget', () => {
+  /**
+   * jarvis-recipes-server waits OCR_JOIN_TIMEOUT_SECONDS (90s) for every OCR
+   * host to answer before continuing with a partial set, and only *then* runs
+   * the LLM structuring pass. A 90s client budget expired at the exact moment
+   * the server began that work, so a degraded-but-successful import — the case
+   * the join deadline exists to serve — always surfaced to the user as
+   * "We could not extract a recipe from these images."
+   */
+  const SERVER_OCR_JOIN_TIMEOUT_MS = 90_000;
+
+  it('outlasts the server join deadline with room for structuring', () => {
+    const {
+      IMPORT_POLL_TIMEOUT_MS,
+    } = require('../../src/services/jobPolling');
+
+    expect(IMPORT_POLL_TIMEOUT_MS).toBeGreaterThan(SERVER_OCR_JOIN_TIMEOUT_MS);
+    // The LLM structuring pass runs after the deadline fires, so matching it
+    // exactly is not enough — leave at least as long again for the model.
+    expect(IMPORT_POLL_TIMEOUT_MS).toBeGreaterThanOrEqual(SERVER_OCR_JOIN_TIMEOUT_MS * 2);
+  });
+
+  it('is what the image-import screen actually polls with', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '../../src/screens/Recipes/ImportJobStatusScreen.tsx'),
+      'utf8',
+    );
+
+    // A hardcoded 90_000 here is the bug this constant exists to prevent.
+    expect(source).toContain('IMPORT_POLL_TIMEOUT_MS');
+    expect(source).not.toContain('timeoutMs: 90_000');
+  });
+});

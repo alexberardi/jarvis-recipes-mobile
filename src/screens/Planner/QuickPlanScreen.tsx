@@ -28,7 +28,12 @@ import {
 
 import PlanDays from '../../components/PlanDays';
 import { PlannerStackParamList } from '../../navigation/types';
-import { RandomSlotResult, randomPlan, rerollSlot } from '../../services/mealPlans';
+import {
+  RandomSlotResult,
+  commitPlan,
+  randomPlan,
+  rerollSlot,
+} from '../../services/mealPlans';
 import { Plan, getCurrentPlan } from '../../services/plans';
 
 type Props = NativeStackScreenProps<PlannerStackParamList, 'QuickPlan'>;
@@ -64,7 +69,11 @@ const QuickPlanScreen = ({ navigation }: Props) => {
   const [slots, setSlots] = useState<RandomSlotResult[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [rerolling, setRerolling] = useState<number | null>(null);
+  // Keyed by date+meal, not by index: re-rolling rebuilds the slots array,
+  // and an index would end up pointing at a different meal.
+  const [locked, setLocked] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const [committing, setCommitting] = useState(false);
   const [saved, setSaved] = useState<Plan | null>(null);
   const [loadingSaved, setLoadingSaved] = useState(true);
 
@@ -93,6 +102,53 @@ const QuickPlanScreen = ({ navigation }: Props) => {
     }, []),
   );
 
+  /**
+   * Save the generated week.
+   *
+   * Everything above this is local state: the picks and any re-rolls on top of
+   * them. Without a commit the plan was lost the moment the tab changed --
+   * generating felt like it worked and nothing was stored. The advanced flow
+   * had this all along ("Save this plan"); the quick flow never did.
+   */
+  const save = async () => {
+    if (!slots?.length) return;
+    setCommitting(true);
+    setError(null);
+    try {
+      const items = slots.flatMap((slot) => {
+        // An empty slot is a real outcome -- the picker can ask for more meals
+        // than there are recipes -- so skip it rather than send a null id.
+        if (!slot.date || !slot.recipe_id) return [];
+        const id = Number(slot.recipe_id);
+        if (!Number.isInteger(id)) return [];
+        return [
+          {
+            date: slot.date,
+            meal_type: slot.meal_type,
+            recipe_id: id,
+            // The quick planner draws from recipes already in the box.
+            source: 'user' as const,
+          },
+        ];
+      });
+
+      if (!items.length) {
+        setError('Nothing to save yet — every meal is still empty.');
+        return;
+      }
+
+      const startDate = items.map((i) => i.date).sort()[0];
+      await commitPlan(startDate, items);
+      // Show it in the saved block above instead of leaving a stale plan there.
+      setSaved(await getCurrentPlan());
+      setSlots(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Could not save the plan.');
+    } finally {
+      setCommitting(false);
+    }
+  };
+
   const toggle = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
     if (next.has(value)) {
@@ -102,6 +158,21 @@ const QuickPlanScreen = ({ navigation }: Props) => {
     }
     return next;
   };
+
+  const slotKey = (slot: { date?: string | null; meal_type: string }) =>
+    `${slot.date ?? ''}-${slot.meal_type}`;
+
+  const toggleLock = (slot: RandomSlotResult) =>
+    setLocked((prev) => {
+      const next = new Set(prev);
+      const key = slotKey(slot);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
 
   const requested = useMemo(
     () =>
@@ -143,10 +214,37 @@ const QuickPlanScreen = ({ navigation }: Props) => {
     setBusy(true);
     setError(null);
     try {
-      // Everything currently shown is excluded, so a full re-roll genuinely
-      // changes the plan rather than reshuffling the same recipes.
-      const res = await randomPlan(requested, chosenIds);
-      setSlots(res.slots);
+      // A full re-roll regenerates server-side, so locked meals have to be kept
+      // out of the request and stitched back in -- asking for every slot and
+      // then discarding the ones that came back would waste the recipes it
+      // spent on them, making the unlocked meals more likely to repeat.
+      const keptSlots = slots.filter((slot) => locked.has(slotKey(slot)));
+      const wanted = requested.filter(
+        (slot) => !locked.has(slotKey(slot)),
+      );
+
+      if (!wanted.length) {
+        setError('Every meal is locked — unlock one to re-roll.');
+        return;
+      }
+
+      // Locked picks are excluded too, or a re-roll can hand the same recipe to
+      // an unlocked day and the week shows it twice.
+      const res = await randomPlan(wanted, chosenIds);
+      const fresh = [...res.slots];
+      const merged = requested.map((position) => {
+        const kept = keptSlots.find((slot) => slotKey(slot) === slotKey(position));
+        if (kept) return kept;
+        return (
+          fresh.shift() ?? {
+            date: position.date,
+            meal_type: position.meal_type,
+            recipe_id: null,
+            title: null,
+          }
+        );
+      });
+      setSlots(merged);
       if (res.incomplete) {
         setError('Ran out of different recipes — some slots kept their pick.');
       }
@@ -155,7 +253,7 @@ const QuickPlanScreen = ({ navigation }: Props) => {
     } finally {
       setBusy(false);
     }
-  }, [slots, requested, chosenIds]);
+  }, [slots, requested, chosenIds, locked]);
 
   const rerollOne = useCallback(
     async (index: number) => {
@@ -221,10 +319,9 @@ const QuickPlanScreen = ({ navigation }: Props) => {
             <PlanDays
               items={saved.items}
               onPressMeal={(meal) =>
-                navigation.getParent()?.navigate('RecipesTab', {
-                  screen: 'RecipeDetail',
-                  params: { id: meal.recipe_id },
-                })
+                // Within THIS stack, not via the Recipes tab: Back must come
+                // back to the week you were looking at.
+                navigation.navigate('RecipeDetail', { id: meal.recipe_id })
               }
             />
             <Divider style={styles.savedDivider} />
@@ -285,7 +382,7 @@ const QuickPlanScreen = ({ navigation }: Props) => {
                 Your week
               </Text>
               <Button compact onPress={rerollAll} disabled={busy}>
-                Re-roll all
+                Re-roll unlocked
               </Button>
             </View>
 
@@ -297,21 +394,48 @@ const QuickPlanScreen = ({ navigation }: Props) => {
                     slot.total_time_minutes ? ` · ${slot.total_time_minutes} min` : ''
                   }`}
                   titleStyle={slot.recipe_id ? undefined : styles.emptyTitle}
-                  right={() =>
-                    rerolling === index ? (
-                      <ActivityIndicator style={styles.cardSpinner} />
-                    ) : (
-                      <IconButton
-                        icon="dice-5-outline"
-                        onPress={() => rerollOne(index)}
-                        disabled={busy}
-                        accessibilityLabel={`Re-roll ${slot.meal_type} on ${slot.date}`}
-                      />
-                    )
-                  }
+                  right={() => {
+                    const isLocked = locked.has(slotKey(slot));
+                    return (
+                      <View style={styles.cardActions}>
+                        <IconButton
+                          icon={isLocked ? 'lock' : 'lock-open-variant-outline'}
+                          onPress={() => toggleLock(slot)}
+                          disabled={busy}
+                          accessibilityLabel={
+                            isLocked
+                              ? `Unlock ${slot.meal_type} on ${slot.date}`
+                              : `Lock ${slot.meal_type} on ${slot.date}`
+                          }
+                        />
+                        {rerolling === index ? (
+                          <ActivityIndicator style={styles.cardSpinner} />
+                        ) : (
+                          <IconButton
+                            icon="dice-5-outline"
+                            onPress={() => rerollOne(index)}
+                            // A lock that only stopped "Re-roll unlocked" would be a
+                            // lie: the dice on a locked card must be dead too.
+                            disabled={busy || isLocked}
+                            accessibilityLabel={`Re-roll ${slot.meal_type} on ${slot.date}`}
+                          />
+                        )}
+                      </View>
+                    );
+                  }}
                 />
               </Card>
             ))}
+
+            <Button
+              mode="contained"
+              onPress={save}
+              loading={committing}
+              disabled={busy || committing}
+              style={styles.action}
+            >
+              Save this plan
+            </Button>
           </>
         ) : null}
       </ScrollView>
@@ -335,6 +459,7 @@ const styles = StyleSheet.create({
   // "Your" -- Text shrinks by default inside a row.
   planTitle: { flexShrink: 0 },
   card: { marginTop: 8 },
+  cardActions: { flexDirection: 'row', alignItems: 'center' },
   cardSpinner: { marginRight: 16 },
   emptyTitle: { opacity: 0.5 },
 });

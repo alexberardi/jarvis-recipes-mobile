@@ -77,7 +77,13 @@ test('sign in, browse, plan the week, re-roll a night, sign out', async () => {
   await waitFor(() => expect(screen.getByText('Planner')).toBeTruthy());
 
   // ── the box ────────────────────────────────────────────────────────────────
-  expect(screen.getByText('Beef Stroganoff')).toBeTruthy();
+  // Planner is the first tab now, so the box takes a tap to reach rather than
+  // being what you land on.
+  fireEvent.press(screen.getByText('Recipes'));
+  // Waited for: the tab mounts before its list has fetched. Asserting
+  // synchronously here passed locally and failed in CI, which runs slower and
+  // under coverage instrumentation.
+  await waitFor(() => expect(screen.getByText('Beef Stroganoff')).toBeTruthy());
   expect(screen.getByText('Turkey Chili')).toBeTruthy();
 
   fireEvent.press(screen.getByText('Beef Stroganoff'));

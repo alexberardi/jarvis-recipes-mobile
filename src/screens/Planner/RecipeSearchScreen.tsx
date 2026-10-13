@@ -6,6 +6,7 @@ import { Appbar, Card, Chip, Searchbar, Text, Button } from 'react-native-paper'
 import { PlannerStackParamList } from '../../navigation/types';
 import { useRecipes } from '../../hooks/useRecipes';
 import { Recipe } from '../../types/Recipe';
+import { resolveRecipeImageUrl } from '../../utils/mediaUrl';
 
 type Props = NativeStackScreenProps<PlannerStackParamList, 'RecipeSearch'>;
 
@@ -93,27 +94,30 @@ const RecipeSearchScreen = ({ navigation, route }: Props) => {
               </Text>
             </View>
           ) : (
-            filteredRecipes.map((recipe) => (
-              <Pressable key={recipe.id} onPress={() => handleSelectRecipe(recipe)}>
-                <Card style={styles.card}>
-                  {recipe.image_url ? (
-                    <Card.Cover source={{ uri: recipe.image_url }} style={styles.cardImage} />
-                  ) : null}
-                  <Card.Content>
-                    <Text variant="titleMedium">{recipe.title}</Text>
-                    {recipe.tags?.length ? (
-                      <View style={styles.tags}>
-                        {recipe.tags.slice(0, 5).map((tag) => (
-                          <Chip key={tag.id} compact style={styles.chip}>
-                            {tag.name}
-                          </Chip>
-                        ))}
-                      </View>
+            filteredRecipes.map((recipe) => {
+              const imageUri = resolveRecipeImageUrl(recipe.image_url);
+              return (
+                <Pressable key={recipe.id} onPress={() => handleSelectRecipe(recipe)}>
+                  <Card style={styles.card}>
+                    {imageUri ? (
+                      <Card.Cover source={{ uri: imageUri }} style={styles.cardImage} />
                     ) : null}
-                  </Card.Content>
-                </Card>
-              </Pressable>
-            ))
+                    <Card.Content>
+                      <Text variant="titleMedium">{recipe.title}</Text>
+                      {recipe.tags?.length ? (
+                        <View style={styles.tags}>
+                          {recipe.tags.slice(0, 5).map((tag) => (
+                            <Chip key={tag.id} compact style={styles.chip}>
+                              {tag.name}
+                            </Chip>
+                          ))}
+                        </View>
+                      ) : null}
+                    </Card.Content>
+                  </Card>
+                </Pressable>
+              );
+            })
           )}
         </ScrollView>
       </View>

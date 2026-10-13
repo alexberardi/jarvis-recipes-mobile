@@ -18,6 +18,12 @@ export type ShoppingItem = {
   amounts: ShoppingAmount[];
   /** Which recipes asked for it, so a surprising line can be traced back. */
   recipes: string[];
+  /**
+   * Always in the cupboard. The server flags rather than hides these: a cook
+   * still needs to know the recipe wants salt. Grouping them away is this
+   * client's job. Optional so a build talking to an older server still renders.
+   */
+  is_staple?: boolean;
 };
 
 export type ShoppingList = {

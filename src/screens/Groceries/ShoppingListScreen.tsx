@@ -13,7 +13,10 @@ import {
   ActivityIndicator,
   Appbar,
   Button,
-  Checkbox,
+  Icon,
+  IconButton,
+  List,
+  Snackbar,
   Chip,
   Divider,
   HelperText,
@@ -23,9 +26,17 @@ import {
 } from 'react-native-paper';
 
 import { GroceriesStackParamList } from '../../navigation/types';
-import { Cart, ShoppingList, buildCart, formatAmounts, getShoppingList } from '../../services/grocery';
+import {
+  Cart,
+  ShoppingItem,
+  ShoppingList,
+  buildCart,
+  formatAmounts,
+  getShoppingList,
+} from '../../services/grocery';
 import { PRESET_LABELS, RangePreset, rangeFor } from './dateRange';
 import { useCheckedItems } from './useCheckedItems';
+import { Staple, addStaple, getStaples, removeStaple } from '../../services/staples';
 
 type Props = NativeStackScreenProps<GroceriesStackParamList, 'ShoppingList'>;
 
@@ -38,15 +49,25 @@ const ShoppingListScreen = ({ navigation }: Props) => {
 
   const [list, setList] = useState<ShoppingList | null>(null);
   const [cart, setCart] = useState<Cart | null>(null);
+  const [staples, setStaples] = useState<Staple[]>([]);
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { checked, toggle, clear } = useCheckedItems(start, end);
+  const { checked, toggle, clear, restore } = useCheckedItems(start, end);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      setList(await getShoppingList(start, end));
+      const [fetched, itsStaples] = await Promise.all([
+        getShoppingList(start, end),
+        // Fetched for their ids: the list says WHICH rows are staples, but
+        // un-marking one needs the id, which only this endpoint carries. A
+        // failure here must not cost the list, so it falls back to none.
+        getStaples().catch(() => [] as Staple[]),
+      ]);
+      setList(fetched);
+      setStaples(itsStaples);
       // The previous range's cart is meaningless here, and leaving the export
       // button showing a stale link is worse than showing none.
       setCart(null);
@@ -65,6 +86,78 @@ const ShoppingListScreen = ({ navigation }: Props) => {
     }, [load]),
   );
 
+  const renderRow = (item: ShoppingItem) => {
+    const isChecked = Boolean(checked[item.name]);
+    const amounts = formatAmounts(item);
+    const isStaple = Boolean(item.is_staple);
+    return (
+      // Two SEPARATE targets, side by side rather than nested: the leading
+      // button classifies the ingredient ("we always have this"), the rest of
+      // the row is this trip's tick. The first version put the staple action on
+      // a long-press and nothing else, which nobody could find -- an invisible
+      // gesture is not a control.
+      <View key={item.name} style={styles.item}>
+        <IconButton
+          icon={isStaple ? 'cart-plus' : 'basket-off-outline'}
+          size={20}
+          onPress={() => toggleStaple(item.name)}
+          accessibilityLabel={
+            isStaple
+              ? `Put ${item.name} back on the shopping list`
+              : `${item.name} is something we always have`
+          }
+          testID={`grocery-staple-${item.name}`}
+        />
+        <TouchableRipple
+          style={styles.itemPress}
+          onPress={() => toggle(item.name)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isChecked }}
+          accessibilityLabel={amounts ? `${item.name}, ${amounts}` : item.name}
+        >
+          <View style={styles.itemRow}>
+            <View style={styles.itemText}>
+              <Text variant="bodyLarge" style={isChecked ? styles.itemDone : undefined}>
+                {item.name}
+              </Text>
+              {amounts ? (
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    { color: theme.colors.onSurfaceVariant },
+                    isChecked ? styles.itemDone : undefined,
+                  ]}
+                >
+                  {amounts}
+                  {item.recipes.length ? ` · ${item.recipes.join(', ')}` : ''}
+                </Text>
+              ) : null}
+            </View>
+            {/* The icon says what the NEXT press does, not what happened: a
+                ticked row is restored by pressing again, and a trash can there
+                claims it would remove it a second time. A plain Icon rather
+                than a button because this ripple is already the control. */}
+            {/* The testID carries the ACTION, not just the position, because
+                Paper's Icon does not forward one to anything queryable -- so a
+                test can see which of the two icons is showing, which is the
+                whole point of the flip. */}
+            <View
+              testID={
+                isChecked ? `grocery-restore-${item.name}` : `grocery-remove-${item.name}`
+              }
+            >
+              <Icon
+                source={isChecked ? 'undo-variant' : 'trash-can-outline'}
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </View>
+        </TouchableRipple>
+      </View>
+    );
+  };
+
   const exportCart = async () => {
     setExporting(true);
     setError(null);
@@ -79,7 +172,30 @@ const ShoppingListScreen = ({ navigation }: Props) => {
     }
   };
 
-  const remaining = (list?.items ?? []).filter((i) => !checked[i.name]).length;
+  // Staples are grouped away rather than hidden, and they do not count towards
+  // "N to buy" -- that number is what is left to put in the trolley.
+  const items = list?.items ?? [];
+  const toShop = items.filter((i) => !i.is_staple);
+  const stapleItems = items.filter((i) => i.is_staple);
+  const remaining = toShop.filter((i) => !checked[i.name]).length;
+
+  const toggleStaple = async (name: string) => {
+    const existing = staples.find((s) => s.name === name);
+    try {
+      if (existing) {
+        await removeStaple(existing.id);
+        setNotice({ text: `${name} is back on the list` });
+      } else {
+        await addStaple(name);
+        setNotice({ text: `${name} is something you always have` });
+      }
+      // Reload rather than patch local state: is_staple is the server's answer,
+      // and a housemate may have changed it too.
+      await load();
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Could not update your staples.');
+    }
+  };
   const guessed = (cart?.items ?? []).filter((i) => i.source === 'llm');
 
   return (
@@ -90,9 +206,17 @@ const ShoppingListScreen = ({ navigation }: Props) => {
           subtitle={list ? `${start} – ${end}` : undefined}
         />
         {list?.items.length ? (
+          // The old icon was checkbox-multiple-blank-outline: two stacked
+          // squares, which reads as COPY. It was pressed expecting a copied
+          // list and silently wiped a shop's worth of ticks instead. Now it
+          // looks like what it does, says so, and can be taken back.
           <Appbar.Action
-            icon="checkbox-multiple-blank-outline"
-            onPress={clear}
+            icon="playlist-remove"
+            onPress={() => {
+              const snapshot = { ...checked };
+              clear();
+              setNotice({ text: 'Ticks cleared', undo: () => restore(snapshot) });
+            }}
             accessibilityLabel="Clear ticks"
           />
         ) : null}
@@ -150,48 +274,38 @@ const ShoppingListScreen = ({ navigation }: Props) => {
               </Text>
             </View>
 
-            {/* A hand-built row rather than Checkbox.Item: that takes a single
-                label, and an amount crammed into it truncates -- a list that
-                says "chicken breast" without "1.5 lb" is not a shopping list.
-                It also marks its label subtree no-hide-descendants, which puts
-                the text out of reach of anything reading the screen. */}
-            {list.items.map((item) => {
-              const isChecked = Boolean(checked[item.name]);
-              const amounts = formatAmounts(item);
-              return (
-                <TouchableRipple
-                  key={item.name}
-                  onPress={() => toggle(item.name)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isChecked }}
-                  accessibilityLabel={amounts ? `${item.name}, ${amounts}` : item.name}
-                >
-                  <View style={styles.item}>
-                    <Checkbox status={isChecked ? 'checked' : 'unchecked'} />
-                    <View style={styles.itemText}>
-                      <Text
-                        variant="bodyLarge"
-                        style={isChecked ? styles.itemDone : undefined}
-                      >
-                        {item.name}
-                      </Text>
-                      {amounts ? (
-                        <Text
-                          variant="bodySmall"
-                          style={[
-                            { color: theme.colors.onSurfaceVariant },
-                            isChecked ? styles.itemDone : undefined,
-                          ]}
-                        >
-                          {amounts}
-                          {item.recipes.length ? ` · ${item.recipes.join(', ')}` : ''}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </TouchableRipple>
-              );
-            })}
+            {/* Only what is actually being bought. Staples live in their own
+                collapsed section below -- present, because a cook needs to know
+                the recipe wants salt, but out of the way of the trolley run. */}
+            {toShop.map(renderRow)}
+
+            {stapleItems.length === 0 && toShop.length > 0 ? (
+              <Text
+                variant="bodySmall"
+                testID="staples-hint"
+                style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                Tap {'\u00a0'}
+                <Icon source="basket-off-outline" size={14} color={theme.colors.onSurfaceVariant} />
+                {'\u00a0'} beside anything you always have in — it comes off your list and
+                out of the cart.
+              </Text>
+            ) : null}
+
+            {stapleItems.length > 0 ? (
+              // Collapsed by default: the point is to get these out of the way.
+              // Hold one again to put it back on the list proper.
+              <List.Accordion
+                title={`Staples (${stapleItems.length})`}
+                description="Always in the cupboard: not counted above, not added to the cart"
+                descriptionNumberOfLines={2}
+                titleStyle={{ color: theme.colors.onSurfaceVariant }}
+                style={{ backgroundColor: 'transparent', paddingLeft: 0 }}
+                testID="staples-section"
+              >
+                {stapleItems.map(renderRow)}
+              </List.Accordion>
+            ) : null}
 
             <Divider style={styles.spacer} />
             <Button
@@ -275,6 +389,28 @@ const ShoppingListScreen = ({ navigation }: Props) => {
           </>
         )}
       </ScrollView>
+
+      {/* Confirms a long-press landed. Without it the only feedback is a row
+          quietly moving into a collapsed section, which reads as the item
+          having vanished. */}
+      <Snackbar
+        visible={notice !== null}
+        onDismiss={() => setNotice(null)}
+        duration={notice?.undo ? 6000 : 2500}
+        action={
+          notice?.undo
+            ? {
+                label: 'Undo',
+                onPress: () => {
+                  notice.undo?.();
+                  setNotice(null);
+                },
+              }
+            : undefined
+        }
+      >
+        {notice?.text ?? ''}
+      </Snackbar>
     </>
   );
 };
@@ -293,10 +429,13 @@ const styles = StyleSheet.create({
   // flexShrink 0: without it the count on the right squeezes "12 to buy" down to
   // "12", the same way "Your week" became "Your".
   listTitle: { flexShrink: 0 },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 8 },
+  item: { flexDirection: 'row', alignItems: 'center' },
+  itemPress: { flex: 1, paddingRight: 8 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   // flex so a long ingredient wraps instead of pushing the row off screen.
   itemText: { flex: 1, paddingVertical: 6 },
   itemDone: { textDecorationLine: 'line-through', opacity: 0.5 },
+  hint: { marginTop: 8, fontStyle: 'italic' },
   cartSummary: { marginTop: 16, gap: 8 },
   guessHeading: { marginTop: 8 },
   unmatched: { marginTop: 4 },

@@ -21,7 +21,7 @@ import axios, {
 } from 'axios';
 
 import authApi from './authApi';
-import { RECIPES_API_BASE_URL } from '../config/env';
+import { getServerUrls } from '../config/serverConfig';
 
 type AccessTokenFn = () => string | null;
 type RefreshTokenFn = () => string | null;
@@ -51,7 +51,6 @@ export const setAuthHandlers = (handlers: {
 };
 
 const recipesApi: AxiosInstance = axios.create({
-  baseURL: RECIPES_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -62,6 +61,10 @@ const recipesApi: AxiosInstance = axios.create({
 });
 
 recipesApi.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  // Per request, not at module load: the endpoint is a setting on a self-hosted
+  // app, and `axios.create` would freeze whatever was known at import time --
+  // before AsyncStorage has been read.
+  config.baseURL = getServerUrls().recipes;
   const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
