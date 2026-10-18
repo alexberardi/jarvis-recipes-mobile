@@ -277,6 +277,22 @@ describe('AuthContext', () => {
       expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(REFRESH_SECURE_KEY);
       expect(await AsyncStorage.getItem(USER_KEY)).toBeNull();
     });
+
+    it('drops a saved import job, so the next session does not resume it', async () => {
+      setKeychainTokens('stored-access', 'stored-refresh');
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(USER));
+      await AsyncStorage.setItem(
+        '@jarvis_recipes/active_job',
+        JSON.stringify({ jobId: 'job-1', jobType: 'url', startedAt: Date.now() }),
+      );
+
+      const { result } = await renderBootstrapped();
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(await AsyncStorage.getItem('@jarvis_recipes/active_job')).toBeNull();
+    });
   });
 
   describe('refresh', () => {

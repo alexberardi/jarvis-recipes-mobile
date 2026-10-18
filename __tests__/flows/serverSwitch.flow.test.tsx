@@ -142,3 +142,34 @@ test('a stored address is in force before anything requests', async () => {
 
   await waitFor(() => expect(getServerUrls().recipes).toBe(FOUND.recipes));
 });
+
+describe('a saved import job does not survive a server change', () => {
+  // The job lives on the old server; resuming it against the new one 404s
+  // forever and traps the recipe list on "Importing recipe".
+  const ACTIVE_JOB_KEY = '@jarvis_recipes/active_job';
+  const saveJob = () =>
+    AsyncStorage.setItem(
+      ACTIVE_JOB_KEY,
+      JSON.stringify({ jobId: 'old', jobType: 'url', startedAt: Date.now() }),
+    );
+
+  test('saving a new address clears it', async () => {
+    await saveJob();
+    renderInApp(<RootNavigator />, { withAuth: true });
+    await openDialog();
+    fireEvent.changeText(lastByText('Jarvis address'), CONFIG);
+    fireEvent.press(screen.getByText('Save'));
+
+    await waitFor(() => expect(getServerUrls()).toEqual(FOUND));
+    await waitFor(async () => expect(await AsyncStorage.getItem(ACTIVE_JOB_KEY)).toBeNull());
+  });
+
+  test('resetting the address clears it', async () => {
+    await saveJob();
+    renderInApp(<RootNavigator />, { withAuth: true });
+    await openDialog();
+    fireEvent.press(screen.getByText('Reset'));
+
+    await waitFor(async () => expect(await AsyncStorage.getItem(ACTIVE_JOB_KEY)).toBeNull());
+  });
+});

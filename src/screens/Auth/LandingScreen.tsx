@@ -6,6 +6,7 @@ import { Button, Text, useTheme } from 'react-native-paper';
 import { AuthStackParamList } from '../../navigation/types';
 import AppLogo from '../../components/AppLogo';
 import ServerUrlDialog from '../../components/ServerUrlDialog';
+import { clearActiveJob } from '../../services/jobPolling';
 import {
   ServerSettings,
   ServerUrls,
@@ -80,11 +81,14 @@ const LandingScreen = ({ navigation }: Props) => {
         await setOverride('auth', overrides.auth ?? null);
         await setOverride('recipes', overrides.recipes ?? null);
         await setConfigUrl(configUrl);
+        // A saved import job lives on the old server; it cannot be resumed here.
+        await clearActiveJob();
         setSettings(getServerSettings());
         setUrls(getServerUrls());
       }}
       onReset={async () => {
         setUrls(await resetServerUrls());
+        await clearActiveJob();
         setSettings(getServerSettings());
         setDialogVisible(false);
       }}

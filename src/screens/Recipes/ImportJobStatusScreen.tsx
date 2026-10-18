@@ -8,6 +8,7 @@ import { RecipesStackParamList } from '../../navigation/types';
 import { getParseJobStatus, cancelJob } from '../../services/parseRecipe';
 import {
   clearActiveJob,
+  isJobGoneError,
   saveActiveJob,
   pollWithBackoff,
   IMPORT_POLL_TIMEOUT_MS,
@@ -145,6 +146,13 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
         );
       } catch (err: any) {
         if (err?.name === 'AbortError') return;
+        if (isJobGoneError(err)) {
+          // The server has no such job (another server, or purged): nothing
+          // to wait for, and keeping it saved would reopen this screen.
+          await clearActiveJob();
+          navigation.reset({ index: 0, routes: [{ name: 'RecipesList' }] });
+          return;
+        }
         setError(err?.message || 'Unable to check import status.');
       }
     };
@@ -183,7 +191,12 @@ const ImportJobStatusScreen = ({ navigation, route }: Props) => {
           onPress: async () => {
             setHandling(true);
             try {
-              await cancelJob(jobId);
+              try {
+                await cancelJob(jobId);
+              } catch (err) {
+                // Already gone on the server: that is what cancelling wanted.
+                if (!isJobGoneError(err)) throw err;
+              }
               await clearActiveJob();
               // Navigate back to RecipesList
               navigation.reset({

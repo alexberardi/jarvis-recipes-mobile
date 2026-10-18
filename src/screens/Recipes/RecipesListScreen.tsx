@@ -10,7 +10,7 @@ import { useRecipes } from '../../hooks/useRecipes';
 import { useSeenJobs } from '../../hooks/useSeenJobs';
 import { getParseJobs } from '../../services/parseRecipe';
 import { RecipesStackParamList } from '../../navigation/types';
-import { loadActiveJob, clearActiveJob } from '../../services/jobPolling';
+import { loadResumableJob } from '../../services/jobPolling';
 import { Recipe } from '../../types/Recipe';
 import { availableTags, filterRecipes } from '../../utils/filterRecipes';
 
@@ -79,16 +79,14 @@ const RecipesListScreen = ({ navigation }: Props) => {
 
   useEffect(() => {
     const resumeJob = async () => {
-      const job = await loadActiveJob();
-      if (job?.jobId) {
+      const job = await loadResumableJob();
+      if (job) {
         navigation.navigate('ImportJobStatus', {
           jobId: job.jobId,
           jobType: job.jobType,
           sourceUrl: job.sourceUrl ?? undefined,
           startedAt: job.startedAt,
         });
-      } else {
-        await clearActiveJob();
       }
     };
     resumeJob();

@@ -24,6 +24,7 @@ import authApi from '../api/authApi';
 import { refreshAuthToken, setAuthHandlers } from '../api/recipesApi';
 import { loadServerUrls } from '../config/serverConfig';
 import { USER_KEY } from '../config/storageKeys';
+import { clearActiveJob } from '../services/jobPolling';
 import { clearTokens, getTokens, setTokens } from '../services/tokenStorage';
 
 export interface AuthUser {
@@ -158,7 +159,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...initialState,
       isLoading: false,
     });
-    await Promise.all([clearTokens(), AsyncStorage.removeItem(USER_KEY)]);
+    // The saved import job belongs to this session (and this server).
+    await Promise.all([clearTokens(), AsyncStorage.removeItem(USER_KEY), clearActiveJob()]);
   }, [applyState]);
 
   /**
