@@ -37,6 +37,35 @@ export const clearActiveJob = async () => {
   }
 };
 
+/**
+ * The saved job, if it is still worth resuming; otherwise clears it and
+ * returns null.
+ *
+ * A job is dropped when it is older than IMPORT_POLL_TIMEOUT_MS (the import
+ * screen would give up on it anyway) or the record is malformed. Without this
+ * a job left behind by another server — or by a build that never cleared it —
+ * reopened "Importing recipe" on every visit to the recipe list.
+ */
+export const loadResumableJob = async (now: number = Date.now()): Promise<PersistedJob | null> => {
+  const job = await loadActiveJob();
+  const fresh =
+    !!job?.jobId &&
+    typeof job.startedAt === 'number' &&
+    now - job.startedAt <= IMPORT_POLL_TIMEOUT_MS;
+  if (!fresh) {
+    await clearActiveJob();
+    return null;
+  }
+  return job;
+};
+
+/**
+ * True when the server says the job does not exist (404): it was never on
+ * this server, or has been purged. There is nothing to poll or cancel.
+ */
+export const isJobGoneError = (err: unknown): boolean =>
+  (err as { response?: { status?: number } } | null)?.response?.status === 404;
+
 export const backoffScheduleMs = [1000, 2000, 3000];
 
 /**

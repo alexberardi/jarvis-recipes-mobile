@@ -7,7 +7,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   backoffScheduleMs,
   clearActiveJob,
+  IMPORT_POLL_TIMEOUT_MS,
+  isJobGoneError,
   loadActiveJob,
+  loadResumableJob,
   pollWithBackoff,
   saveActiveJob,
 } from '../../src/services/jobPolling';
@@ -23,6 +26,45 @@ describe('jobPolling', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+  });
+
+  describe('loadResumableJob', () => {
+    const NOW = JOB.startedAt + 10_000;
+
+    it('returns a job young enough to still be polled', async () => {
+      await saveActiveJob(JOB);
+      expect(await loadResumableJob(NOW)).toEqual(JOB);
+      expect(await loadActiveJob()).toEqual(JOB);
+    });
+
+    it('drops and clears a job older than the poll timeout', async () => {
+      await saveActiveJob(JOB);
+      const stale = JOB.startedAt + IMPORT_POLL_TIMEOUT_MS + 1;
+      expect(await loadResumableJob(stale)).toBeNull();
+      expect(await loadActiveJob()).toBeNull();
+    });
+
+    it('drops and clears a record without a startedAt', async () => {
+      await AsyncStorage.setItem(
+        '@jarvis_recipes/active_job',
+        JSON.stringify({ jobId: 'job-1', jobType: 'url' }),
+      );
+      expect(await loadResumableJob(NOW)).toBeNull();
+      expect(await AsyncStorage.getItem('@jarvis_recipes/active_job')).toBeNull();
+    });
+
+    it('returns null when nothing is saved', async () => {
+      expect(await loadResumableJob(NOW)).toBeNull();
+    });
+  });
+
+  describe('isJobGoneError', () => {
+    it('is true only for a 404 response', () => {
+      expect(isJobGoneError({ response: { status: 404 } })).toBe(true);
+      expect(isJobGoneError({ response: { status: 500 } })).toBe(false);
+      expect(isJobGoneError(new Error('Network Error'))).toBe(false);
+      expect(isJobGoneError(null)).toBe(false);
+    });
   });
 
   describe('active job persistence', () => {
