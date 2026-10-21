@@ -1,5 +1,6 @@
-// Fallbacks are the documented local dev ports: jarvis-auth 7701,
-// jarvis-recipes-server 7030. Override per-environment via .env
+// Fallbacks are jarvisd's single API port: jarvis-auth at /auth,
+// jarvis-recipes-server at /recipes (both on 7700). Discovery (/services)
+// normally replaces them. Override per-environment via .env
 // (see env.template) or EAS environment variables.
 
 /**
@@ -28,12 +29,12 @@ const fromEnv = (value: string | undefined, fallback: string): string => {
 
 const AUTH_API_BASE_URL: string = fromEnv(
   process.env.EXPO_PUBLIC_AUTH_API_BASE_URL,
-  'http://localhost:7701',
+  'http://localhost:7700/auth',
 );
 
 const RECIPES_API_BASE_URL: string = fromEnv(
   process.env.EXPO_PUBLIC_RECIPES_API_BASE_URL,
-  'http://localhost:7030',
+  'http://localhost:7700/recipes',
 );
 
 export { AUTH_API_BASE_URL, RECIPES_API_BASE_URL, fromEnv };
