@@ -75,6 +75,18 @@ describe('addresses that only mean something inside docker', () => {
     expect(found.recipes).toBe('http://10.0.0.107:7030');
   });
 
+  test('a single-port jarvisd URL is re-pointed at the host, keeping its path', async () => {
+    // With server.legacy_ports off, /services hands out the path-prefixed
+    // 7700 URLs; the phone must reach them on the host it already trusts.
+    global.fetch = respond([
+      { name: 'jarvis-recipes-server', url: 'http://localhost:7700/recipes' },
+    ]) as any;
+
+    const found = await discoverServices('http://10.0.0.5:7700');
+
+    expect(found.recipes).toBe('http://10.0.0.5:7700/recipes');
+  });
+
   test('a real hostname is left alone', async () => {
     global.fetch = respond([
       { name: 'jarvis-recipes-server', url: 'https://recipes.example.com:443' },

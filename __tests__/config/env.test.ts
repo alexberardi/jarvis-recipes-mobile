@@ -48,6 +48,26 @@ describe('fromEnv', () => {
   });
 });
 
+describe('defaults', () => {
+  const savedEnv = process.env;
+
+  afterEach(() => {
+    process.env = savedEnv;
+  });
+
+  it('defaults to the single API port', () => {
+    process.env = { ...process.env };
+    delete process.env.EXPO_PUBLIC_AUTH_API_BASE_URL;
+    delete process.env.EXPO_PUBLIC_RECIPES_API_BASE_URL;
+
+    jest.isolateModules(() => {
+      const env = require('../../src/config/env');
+      expect(env.AUTH_API_BASE_URL).toBe('http://localhost:7700/auth');
+      expect(env.RECIPES_API_BASE_URL).toBe('http://localhost:7700/recipes');
+    });
+  });
+});
+
 describe('eas.json', () => {
   const eas = JSON.parse(
     readFileSync(join(__dirname, '../../eas.json'), 'utf-8'),
